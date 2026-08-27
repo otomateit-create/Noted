@@ -1,0 +1,198 @@
+/*
+ * Le navigateur de cours de la barre de titre : le bouton au livre ouvert,
+ * puis le panneau a deux colonnes qu'il deplie (matieres | cours).
+ *
+ * Le panneau quitte les tons papier du reste de l'application : deux nuances
+ * de blanc — gris-blanc froid pour les matieres, blanc pur pour les cours —
+ * separees par une couture de laiton brillant, fuselee, qui ne touche jamais
+ * les bords. Le laiton ne reste que dans les accents.
+ */
+
+.course-nav {
+  -webkit-app-region: no-drag;
+  position: relative;
+  max-width: 60%;
+  min-width: 0;
+}
+
+/* --- Le bouton : logo au livre + titre du cours ouvert --------------------- */
+
+/* Le survol n'allume plus toute la zone : c'est le livre seul qui repond,
+   d'un leger zoom. Le titre reste un simple libelle. */
+.course-nav-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 30px;
+  max-width: 100%;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+}
+
+.course-nav-logo {
+  flex: none;
+  color: var(--brass);
+  transition: transform 160ms var(--spring);
+}
+
+.course-nav-button:hover .course-nav-logo,
+.course-nav-button[data-open='true'] .course-nav-logo {
+  transform: scale(1.22);
+}
+
+/* Le titre du cours reste le seul element serif de la barre — mais discret :
+   c'est le livre qui porte le geste, le nom ne fait que renseigner. */
+.course-nav-title {
+  font-family: var(--font-read);
+  font-size: var(--text-base);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Le panneau ------------------------------------------------------------ */
+
+.course-nav-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 80;
+  display: flex;
+  min-width: 560px;
+  max-width: 720px;
+  max-height: min(560px, 72vh);
+  background: #ffffff;
+  border: 1px solid #e5e5e8;
+  border-radius: 16px;
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+
+.course-nav-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+
+.course-nav-subjects {
+  flex: none;
+  width: 224px;
+  background: #f6f6f8;
+}
+
+.course-nav-courses {
+  flex: 1;
+  min-width: 300px;
+  background: #ffffff;
+}
+
+/* La couture entre les deux blancs : un fuseau de laiton, plus epais au
+   centre et qui s'affine regulierement vers ses pointes (le losange du
+   clip-path), rehausse d'un eclat clair a mi-hauteur (le degrade). Les marges
+   le tiennent toujours a distance des bords haut et bas. */
+.course-nav-seam {
+  flex: none;
+  align-self: stretch;
+  width: 3px;
+  margin: 30px 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(171, 124, 28, 0),
+    #c9992f 30%,
+    #ecd08a 50%,
+    #c9992f 70%,
+    rgba(171, 124, 28, 0)
+  );
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+.course-nav-eyebrow {
+  padding: var(--space-2) var(--space-3) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9b9ba1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Les lignes ------------------------------------------------------------ */
+
+.course-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px var(--space-3);
+  border-radius: 9px;
+  font-size: var(--text-base);
+  color: #4c4c52;
+  text-align: left;
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+
+.course-nav-item:hover {
+  background: rgba(17, 17, 20, 0.05);
+  color: #1d1d21;
+}
+
+.course-nav-item-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* La matiere depliee (celle dont les cours sont a droite) : une pastille
+   blanche posee sur la colonne grise, comme l'onglet actif du dock. */
+.course-nav-subject[data-deployed='true'] {
+  background: #ffffff;
+  color: var(--brass-deep);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(20, 20, 24, 0.1);
+}
+
+.course-nav-subject[data-deployed='true']:hover {
+  background: #ffffff;
+}
+
+/* La matiere du cours ouvert garde un point laiton, meme quand on explore une
+   autre matiere : le repere de « ou je suis » ne bouge pas. */
+.course-nav-subject[data-current='true']::before {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brass);
+}
+
+.course-nav-count {
+  flex: none;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  color: #ababb1;
+}
+
+/* Le cours ouvert, dans la colonne de droite : l'inverse de la matiere —
+   une pastille grise sur le blanc. */
+.course-nav-course[data-current='true'] {
+  background: #f4f4f6;
+  color: var(--brass-deep);
+  font-weight: 600;
+}
+
+.course-nav-empty {
+  padding: var(--space-3);
+  font-size: var(--text-base);
+  color: #9b9ba1;
+  font-style: italic;
+}

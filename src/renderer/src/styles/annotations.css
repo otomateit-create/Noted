@@ -1,0 +1,433 @@
+/* --- Couche de texte du PDF ------------------------------------------------
+   Reprise de la feuille de pdf.js, reduite a ce qui sert ici : ni annotations
+   PDF, ni editeur, ni mode contraste. Ces regles ne sont pas decoratives — ce
+   sont elles qui posent les glyphes transparents exactement sur ceux de
+   l'image. Un ajustement a l'oeil ferait deriver la selection d'une ligne. */
+
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  text-align: initial;
+  line-height: 1;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 1;
+
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.textLayer :is(span, br) {
+  /* Le texte est deja peint dans l'image en dessous : celui-ci ne sert qu'a
+     etre attrape par le curseur. */
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+/* Les sauts de ligne que pdf.js seme entre deux fragments de texte n'ont aucun
+   glyphe a porter, mais ils gardent une hauteur de ligne — et, faute de
+   position propre, ils s'empilent tous au bord gauche de la page. Des qu'une
+   selection les traversait, cette pile se peignait en colonne de petits carres
+   dans la marge, sous le texte selectionne. Reduits a rien, ils ne se voient
+   plus et continuent de couper les lignes dans le texte copie. */
+.textLayer br[role='presentation'] {
+  font-size: 0;
+  line-height: 0;
+}
+
+/* --- Le relais du glissement ----------------------------------------------
+   Les glyphes transparents sont des boites absolues qui ne couvrent que leurs
+   propres lettres : entre deux lignes, dans une marge, autour d'une figure, il
+   n'y a rien a attraper. Pendant un glissement, ce calque-la se deplie sur
+   toute la page et donne au moteur de selection une cible continue — sans lui,
+   passer sur un blanc fait sauter la selection a la fin de la page au lieu de
+   l'etendre au fil du texte. Repris de `TextLayerBuilder` de pdf.js, que la
+   classe bas niveau `TextLayer` n'apporte pas. Chromium le corrige a partir de
+   la version 148 ; Electron 43 en est loin. */
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+}
+
+.textLayer.selecting .endOfContent {
+  top: 0;
+}
+
+.textLayer > :not(.markedContent, .endOfContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.textLayer .markedContent {
+  display: contents;
+}
+
+/* Une image inseree dans le PDF n'a pas de texte a selectionner. */
+.textLayer span[role='img'] {
+  user-select: none;
+  cursor: default;
+}
+
+/* Le texte etant transparent, c'est le fond de la selection qui la rend
+   visible — d'ou une teinte plus franche que celle d'un texte ordinaire.
+   Meme cause que pour ::highlight() plus bas : le navigateur pose sa propre
+   couleur de texte par defaut sur ::selection (HighlightText), qui ne tient
+   pas compte du color: transparent de l'element selectionne. Sans le lui
+   redonner ici, chaque lettre selectionnee redevient visible, doublee et
+   decalee au-dessus du glyphe deja peint dans l'image. */
+.textLayer ::selection {
+  background: rgba(171, 124, 28, 0.34);
+  color: transparent;
+}
+
+/* --- Les cinq couleurs, peintes sur le document ----------------------------
+   Par le registre de surlignage du navigateur, comme la recherche ⌘F : rien
+   n'est insere dans le HTML, ni dans celui de React ni dans la couche de texte
+   que pdf.js refait a chaque rendu de page. */
+
+::highlight(noted-hl-retenir) {
+  background-color: rgba(232, 185, 59, 0.42);
+}
+
+::highlight(noted-hl-incompris) {
+  background-color: rgba(220, 91, 76, 0.28);
+}
+
+::highlight(noted-hl-definition) {
+  background-color: rgba(76, 169, 122, 0.32);
+}
+
+::highlight(noted-hl-formule) {
+  background-color: rgba(61, 143, 209, 0.26);
+}
+
+::highlight(noted-hl-transversal) {
+  background-color: rgba(155, 107, 196, 0.28);
+}
+
+/* Le passage qu'on vient de rejoindre depuis la liste, le temps de le situer. */
+::highlight(noted-hl-focus) {
+  background-color: var(--brass);
+  color: var(--on-brass);
+}
+
+/* Sur un PDF, le texte surligne doit rester invisible.
+   Le glyphe est deja peint dans l'image ; celui de la couche de texte n'est la
+   que pour le curseur, et il est ecrit dans une police de substitution etiree
+   au plus pres — jamais exactement superposee. Des que le navigateur le rend
+   visible, on lit chaque lettre en double, legerement decalee. Il ne recopie
+   pas ici la couleur transparente de l'element : il faut la lui redonner. */
+.textLayer span::highlight(noted-hl-retenir),
+.textLayer span::highlight(noted-hl-incompris),
+.textLayer span::highlight(noted-hl-definition),
+.textLayer span::highlight(noted-hl-formule),
+.textLayer span::highlight(noted-hl-transversal),
+.textLayer span::highlight(noted-hl-focus) {
+  color: transparent;
+}
+
+/* --- La palette de surlignage ---------------------------------------------
+   Flottante, posee au-dessus de la selection : elle sort la ou l'oeil est
+   deja, plutot que dans une barre d'outils qu'il faudrait aller chercher. */
+
+.palette {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  animation: palette-in 120ms var(--ease);
+}
+
+@keyframes palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette {
+    animation: none;
+  }
+}
+
+.palette-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.palette-swatch {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  transition: transform var(--fast) var(--ease);
+}
+
+.palette-swatch:hover {
+  transform: scale(1.12);
+}
+
+/* La couleur deja posee se reconnait a son cerne, pas a une pastille
+   supplementaire qui masquerait la couleur elle-meme. */
+.palette-swatch[data-active='true'] {
+  box-shadow: 0 0 0 2px var(--paper-overlay), 0 0 0 3.5px var(--text-dim);
+}
+
+/* Le chiffre est sur la pastille : la palette apprend les raccourcis a qui ne
+   les connait pas encore, sans ligne d'aide en plus. */
+.palette-key {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.palette-separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--space-1);
+  background: var(--rule-strong);
+}
+
+.palette-action {
+  height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  white-space: nowrap;
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.palette-action:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.palette-action[data-active='true'] {
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+.palette-action--remove:hover {
+  color: var(--hl-incompris);
+}
+
+.palette-note {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.palette-note-input {
+  width: 300px;
+  padding: var(--space-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text);
+  resize: none;
+  user-select: text;
+  cursor: text;
+}
+
+.palette-note-input::placeholder {
+  color: var(--text-ghost);
+}
+
+.palette-note-hint {
+  font-size: 10px;
+  color: var(--text-ghost);
+}
+
+/* --- Le tiroir des surlignages --------------------------------------------
+   A la meme place que la recherche ⌘F, et pour la meme raison : on y revient
+   en levant les yeux, sans quitter le passage qu'on lit. */
+
+.drawer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--rule);
+}
+
+.drawer-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.drawer-title {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.drawer-filters {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.drawer-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  transition: background-color var(--fast) var(--ease);
+}
+
+.drawer-filter:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.drawer-filter[data-active='true'] {
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+.drawer-filter:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.drawer-filter-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* Le compte est contre le mot « Surlignages », comme une pastille de courrier
+   non lu : c'est le nombre qui attire l'oeil, pas le libelle. */
+.drawer-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--brass-strong);
+}
+
+.drawer-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border-top: 1px solid var(--rule);
+  padding: var(--space-1);
+}
+
+.drawer-empty {
+  padding: var(--space-3);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text-ghost);
+}
+
+.drawer-entry {
+  display: flex;
+  align-items: flex-start;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--fast) var(--ease);
+}
+
+.drawer-entry:hover {
+  background: var(--hover);
+}
+
+.drawer-entry-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-2);
+  text-align: left;
+}
+
+.drawer-entry-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.drawer-entry-anchor {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+/* Deux lignes au plus : la liste sert a retrouver un passage, pas a le relire. */
+.drawer-entry-text {
+  font-family: var(--font-read);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text-dim);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.drawer-entry-comment {
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--brass-strong);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--brass-line);
+}
+
+/* La suppression ne se montre qu'au survol de sa ligne : une croix par
+   surlignage transformerait la liste en champ de mines. */
+.drawer-entry-remove {
+  opacity: 0;
+  flex: none;
+  margin: 4px;
+}
+
+.drawer-entry:hover .drawer-entry-remove,
+.drawer-entry-remove:focus-visible {
+  opacity: 1;
+}

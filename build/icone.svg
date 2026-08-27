@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+  <linearGradient id="fond" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#4a4034"/>
+    <stop offset="1" stop-color="#231e19"/>
+  </linearGradient>
+  <filter id="ombre-pastille" x="-15%" y="-15%" width="130%" height="130%">
+    <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#1a1410" flood-opacity="0.3"/>
+  </filter>
+  <filter id="feuille" x="-25%" y="-25%" width="150%" height="150%">
+    <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity="0.42"/>
+  </filter></defs>
+  <g filter="url(#ombre-pastille)">
+    <rect x="100" y="100" width="824" height="824" rx="185.4" fill="url(#fond)"/>
+  </g>
+  <rect x="228" y="300" width="262" height="404" rx="16" fill="#ddd4c4"/>
+  <rect x="262" y="352" width="188" height="15" rx="7.5" fill="#a49a88"/><rect x="262" y="392" width="164" height="15" rx="7.5" fill="#a49a88"/><rect x="262" y="432" width="188" height="15" rx="7.5" fill="#a49a88"/><rect x="262" y="472" width="138" height="15" rx="7.5" fill="#a49a88"/><rect x="262" y="512" width="188" height="15" rx="7.5" fill="#a49a88"/><rect x="262" y="552" width="164" height="15" rx="7.5" fill="#a49a88"/><rect x="262" y="592" width="100" height="15" rx="7.5" fill="#a49a88"/>
+  <g filter="url(#feuille)">
+    <rect x="534" y="300" width="262" height="404" rx="16" fill="#fffefa"/>
+  </g>
+  <rect x="560" y="404" width="210" height="52" rx="11" fill="#dcac2e"/>
+  <rect x="568" y="352" width="172" height="15" rx="7.5" fill="#6b6153"/><rect x="568" y="432" width="146" height="15" rx="7.5" fill="#6b6153"/>
+  <rect x="568" y="532" width="188" height="15" rx="7.5" fill="#6b6153"/><rect x="568" y="572" width="156" height="15" rx="7.5" fill="#6b6153"/><rect x="568" y="612" width="114" height="15" rx="7.5" fill="#6b6153"/>
+</svg>

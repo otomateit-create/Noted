@@ -1,0 +1,321 @@
+.titlebar {
+  /* `relative` : le dock des trois sections se centre dessus en absolu. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--titlebar-height);
+  flex: none;
+  padding-right: var(--space-4);
+  /* La barre fond dans le papier : un ton au-dessus du bureau des cartes,
+     separee du contenu par le seul filet. */
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  /* Toute la barre deplace la fenetre, sauf ce qui est marque no-drag. */
+  -webkit-app-region: drag;
+}
+
+/* Les trois boutons de fenetre macOS occupent ce creux. */
+.titlebar-gutter {
+  width: 74px;
+  flex: none;
+}
+
+/*
+ * Hors de l'espace de travail, la barre surmonte la coque claire de l'accueil
+ * et non la feuille creme : elle prend alors ses neutres, sans quoi un liseré
+ * beige courrait au-dessus d'un fond blanc-bleute.
+ */
+.app:not([data-view='workspace']) .titlebar {
+  background: var(--shell-bg);
+  border-bottom-color: var(--shell-line);
+  font-family: var(--font-system);
+}
+
+.app:not([data-view='workspace']) .titlebar-brand-mark {
+  font-family: var(--font-system);
+  font-size: var(--text-base);
+  font-weight: 620;
+  letter-spacing: -0.016em;
+  color: var(--shell-text);
+}
+
+.app:not([data-view='workspace']) .titlebar-brand-subject,
+.app:not([data-view='workspace']) .breadcrumb-separator {
+  color: var(--shell-text-dim);
+}
+
+.app:not([data-view='workspace']) .titlebar-brand:hover {
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.app:not([data-view='workspace']) .icon-button,
+.app:not([data-view='workspace']) .claude-indicator {
+  color: var(--shell-text-dim);
+}
+
+.app:not([data-view='workspace']) .icon-button:hover {
+  background: rgba(0, 0, 0, 0.045);
+  color: var(--shell-text-mid);
+}
+
+/*
+ * Sur la coque d'accueil, la barre devient une pilule de verre detachee des
+ * bords, posee sur le bureau creme comme les deux autres plaques. Sa hauteur
+ * ne change pas — seuls les feux macOS suivent le decalage (main/ipc.ts). La
+ * page de matiere fait partie de la coque au meme titre que les autres.
+ */
+.app:is(
+    [data-view='dashboard'],
+    [data-view='flashcards'],
+    [data-view='memoire'],
+    [data-view='subject']
+  )
+  .titlebar {
+  margin: var(--hub-gap) var(--hub-gap) 0;
+  border: var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  transition: box-shadow 260ms var(--swift);
+}
+
+.app:is(
+    [data-view='dashboard'],
+    [data-view='flashcards'],
+    [data-view='memoire'],
+    [data-view='subject']
+  )
+  .titlebar:hover {
+  box-shadow: var(--glass-shadow-hover);
+}
+
+/* --- Marque, retour a l'accueil -------------------------------------------- */
+
+.titlebar-brand {
+  -webkit-app-region: no-drag;
+  display: flex;
+  /* Centre, pas baseline : le mot doit tomber sur l'axe des feux macOS
+     (voir trafficLightPosition dans main/index.ts), pas sur sa propre ligne
+     de base — les deux ne coincidaient pas et le nom paraissait trop haut. */
+  align-items: center;
+  gap: var(--space-2);
+  height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  flex: none;
+  transition: background-color var(--fast) var(--ease);
+}
+
+.titlebar-brand:hover {
+  background: var(--paper-overlay);
+}
+
+.titlebar-brand-mark {
+  font-family: var(--font-read);
+  font-size: var(--text-lg);
+  color: var(--text);
+}
+
+.titlebar-brand-subject {
+  font-size: var(--text-base);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- Navigation : reculer / avancer ---------------------------------------- */
+
+.titlebar-nav {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+/* Les boutons du bandeau grandissent avec lui. La regle est prefixee par
+   `.titlebar` : `.icon-button` sert aussi dans les entetes de panneaux, qui
+   n'ont pas grandi. */
+.titlebar .icon-button {
+  height: 28px;
+  min-width: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  font-size: var(--text-base);
+}
+
+.titlebar-nav .icon-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* --- Separateur de la marque (Noted › matiere) ----------------------------- */
+
+.breadcrumb-separator {
+  color: var(--text-ghost);
+  font-size: var(--text-base);
+}
+
+/* --- Bouton d'enregistrement ---------------------------------------------- */
+
+/* Un carre, pas un libelle : le geste est assez connu pour se passer de mot. */
+.save-button {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius);
+  color: var(--text-faint);
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.save-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.save-button:hover {
+  background: var(--hover);
+  color: var(--text-dim);
+}
+
+.save-button:active {
+  background: var(--rule-strong);
+}
+
+/* Une modification attend d'etre ecrite : le trait passe au laiton. */
+.save-button[data-state='pending'] {
+  color: var(--brass);
+}
+
+/* L'accuse de reception se voit sans clignoter : le fond laiton tient une
+   seconde puis s'efface. */
+.save-button[data-confirmed='true'] {
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+.save-button[data-state='error'] {
+  color: var(--hl-incompris);
+}
+
+/* --- Actions -------------------------------------------------------------- */
+
+.titlebar-actions {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* --- Les trois sections de l'espace de travail ----------------------------
+   Un dock centre sur la barre, detache de tout le reste : une pilule de verre
+   posee au milieu, comme une telecommande. Le centrage est absolu — le dock ne
+   participe pas au flux de la barre, les groupes de gauche et de droite ne le
+   poussent pas et il ne bouge pas quand un titre s'allonge. */
+.titlebar-panels {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 2px 10px rgba(74, 58, 33, 0.08);
+}
+
+.titlebar-panel {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text-faint);
+  white-space: nowrap;
+  transition:
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+/* Eteinte, la section garde sa place et son nom : on doit pouvoir la rallumer
+   sans se demander ou elle est passee. C'est le remplissage qui dit l'etat, pas
+   la presence. */
+.titlebar-panel:hover {
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--text-dim);
+}
+
+/* Allumee : une pilule blanche qui se detache du verre, le laiton dans la
+   lettre plutot qu'en aplat — l'etat se lit sans peser. */
+.titlebar-panel[data-active='true'] {
+  background: var(--paper-overlay);
+  color: var(--brass-strong);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(74, 58, 33, 0.14);
+}
+
+.titlebar-panel[data-active='true']:hover {
+  background: var(--paper-overlay);
+  color: var(--brass-deep);
+}
+
+/* Un panneau retreci n'a plus la place des trois noms. Ils s'en vont ensemble
+   plutot qu'un par un : un reglage a trois positions dont il manque une ne se
+   comprend plus. Le clavier (⌘1/⌘2/⌘3, ⌘J) reste, lui. */
+@media (max-width: 1040px) {
+  .titlebar-panels {
+    display: none;
+  }
+}
+
+/* --- Indicateur de connexion Claude --------------------------------------- */
+
+.claude-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  height: 32px;
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+.claude-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-ghost);
+  transition: background-color var(--normal) var(--ease);
+}
+
+.claude-indicator[data-state='ready'] .claude-dot {
+  background: var(--hl-definition);
+  /* Halo tres discret : present sans clignoter ni attirer l'oeil. */
+  box-shadow: 0 0 0 3px rgba(46, 139, 87, 0.18);
+}
+
+.claude-indicator[data-state='error'] .claude-dot {
+  background: var(--hl-incompris);
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.16);
+}
+
+.claude-indicator[data-state='error'] .claude-label {
+  color: var(--hl-incompris);
+}

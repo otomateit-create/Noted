@@ -1,0 +1,178 @@
+/* Le lien vivant entre le cours et les notes.
+ *
+ * Deux marges qui se font face. Celle des notes dit a quoi chaque passage est
+ * rattache ; celle du cours montre l'endroit qu'on vient d'y demander. Aucune
+ * des deux ne doit se faire remarquer : ce sont des reperes qu'on cherche du
+ * regard quand on en a besoin, pas des elements d'interface qui reclament
+ * l'attention. */
+
+/* --- La marge des notes --------------------------------------------------- */
+
+.notes-gutter {
+  position: absolute;
+  inset: 0;
+  /* La couche laisse passer les clics : seuls ses reperes en attrapent. */
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* La largeur reservee au repere. La feuille la laisse libre a sa gauche : sans
+   cela le repere mordait sur le texte des que le panneau devenait etroit. */
+.notes-gutter,
+.notes-stage {
+  --mark-width: 46px;
+}
+
+/* Le repere du segment : le lieu, affiche des qu'il change, et le point du
+   passage quand l'ancre en designe un — dans cet ordre de lecture. Sa boite
+   fait la hauteur de la ligne visee et son contenu s'y centre : c'est la seule
+   facon de rester au milieu de la ligne quelle que soit la police du bloc. */
+.notes-mark {
+  position: absolute;
+  left: 0;
+  width: var(--mark-width);
+  padding: 0 var(--space-2) 0 0;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  pointer-events: auto;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--text-ghost);
+  transition: color var(--fast) var(--ease);
+}
+
+.notes-mark:hover {
+  color: var(--brass-strong);
+}
+
+/* Un titre de section peut etre long : il se coupe dans la colonne du repere
+   plutot que de deborder par la gauche, hors de la marge. */
+.notes-mark-place {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Un point plein pour un passage precis : la difference avec une simple page se
+   voit sans avoir a lire. */
+.notes-mark-dot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brass);
+}
+
+.notes-mark[data-passage='true'] .notes-mark-dot {
+  box-shadow: 0 0 0 3px var(--brass-wash);
+}
+
+/* Les notes d'un passage, rallumees le temps d'un coup d'oeil. */
+.notes-lit {
+  position: absolute;
+  left: var(--mark-width);
+  right: 0;
+  border-radius: var(--radius-sm);
+  background: var(--brass-wash);
+  animation: notes-lit-fade 2.6s var(--ease) forwards;
+}
+
+@keyframes notes-lit-fade {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Le menu du clic droit sur un repere : une seule action, posee sous le
+   curseur. Meme robe que la palette de surlignage — c'est le meme genre
+   d'objet, flottant et ephemere. */
+.anchor-menu {
+  position: fixed;
+  z-index: 40;
+  padding: var(--space-1);
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  pointer-events: auto;
+  animation: palette-in 120ms var(--ease);
+}
+
+.anchor-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.anchor-menu-item:hover {
+  background: var(--brass-wash);
+}
+
+/* --- La marge du cours ---------------------------------------------------- */
+
+/* Origine de taille nulle : ses enfants se placent dans le repere du contenu
+   defilant, et suivent donc le document sans recalcul. */
+.course-marks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Le passage qu'on vient de designer depuis la marge des notes : un contour, le
+   temps de le retrouver, puis plus rien. Ni fond ni aplat : on n'a pas
+   surligne, on a clique. */
+.course-spot {
+  position: absolute;
+  border: 1px solid var(--brass);
+  border-radius: 2px;
+  pointer-events: none;
+  animation: course-spot-fade 3s var(--ease) forwards;
+}
+
+@keyframes course-spot-fade {
+  0%,
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* --- Les passages mentionnes a l'assistant ----------------------------------
+   Selectionner dans la feuille, cliquer « Mentionner » : le passage rejoint la
+   barre de saisie de l'assistant, numerote, et reste marque ici jusqu'a
+   l'envoi. Le surlignage lui-meme est peint par le registre du navigateur, avec
+   le meme lavis que les passages cites d'une reponse — c'est la meme chose vue
+   de l'autre bout de l'ecran, elle se lit donc pareil.
+
+   Le calque des pastilles est celui du fil, envoye dans ce cadre-ci : il vit
+   au-dessus de la marge d'ancrage, pour qu'un « p. 12 » et un numero tombes sur
+   la meme ligne restent tous deux lisibles. */
+.notes-stage > .quote-marks {
+  z-index: 2;
+}

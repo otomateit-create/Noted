@@ -1,0 +1,182 @@
+@import './tokens.css';
+@import './math.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Toute lettre se selectionne, comme dans n'importe quelle application. La
+     regle inverse — tout interdire puis rouvrir les quelques zones lisibles —
+     rendait le glisser-selectionner impossible a amorcer : Chromium n'amorce
+     aucune selection depuis un noeud `user-select: none` et ne se rabat ni sur
+     le parent ni sur l'enfant selectionnable, si bien qu'un clic dans un
+     interligne, une marge ou un blanc de mise en page ne prenait pas. Ce qui
+     s'actionne plutot que se lit — le chrome — s'exclut juste en dessous. */
+  user-select: text;
+  cursor: auto;
+}
+
+/* --- Chrome --------------------------------------------------------------
+   Barres, marges, calques et menus : on les actionne, on ne les lit pas. Y
+   amorcer une selection est toujours un accident, jamais une intention. Les
+   champs de saisie qu'ils contiennent se rouvrent d'eux-memes, plus bas : une
+   declaration posee sur l'element l'emporte sur une valeur heritee. */
+button,
+label,
+summary,
+select,
+[role='button'] {
+  user-select: none;
+}
+
+.titlebar,
+.panel-head,
+.toolbar,
+.pager,
+.breadcrumb,
+.zoom-badge,
+.claude-indicator,
+.save-indicator,
+.notes-status,
+.notes-gutter,
+.course-marks,
+.pdf-page-number,
+.legend,
+.legend-pop,
+.palette,
+.block-menu,
+.block-tools-layer,
+.tool-popover,
+.tool-menu,
+.composer-menu,
+.composer-picker,
+.chat-suggestions,
+.thinking,
+.library,
+.finder,
+.shortcuts,
+.drop,
+.hub-sidebar,
+.ocr-tabs,
+.ocr-banner,
+.drawer-bar,
+.extraction-bar,
+.empty {
+  user-select: none;
+  cursor: default;
+}
+
+/* Un champ reste toujours selectionnable, meme pose au milieu du chrome. */
+input,
+textarea,
+[contenteditable='true'] {
+  user-select: text;
+}
+
+/*
+ * Grain tres leger sur le fond. Un aplat de creme parfaitement uniforme sur un
+ * ecran de 27 pouces parait plat et synthetique ; ce bruit lui donne le
+ * relief d'un papier sans jamais devenir visible consciemment.
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  outline: none;
+}
+
+/* --- Barres de defilement ------------------------------------------------
+   Discretes au repos, elles n'apparaissent qu'au survol du panneau. */
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  transition: background-color var(--normal) var(--ease);
+}
+
+*:hover > ::-webkit-scrollbar-thumb,
+*:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scroll-thumb);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scroll-thumb-hover) !important;
+}
+
+/* --- Focus ---------------------------------------------------------------
+   Visible au clavier, invisible a la souris. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background: var(--brass-wash);
+  color: var(--text);
+}
+
+/* --- Accessibilite ------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

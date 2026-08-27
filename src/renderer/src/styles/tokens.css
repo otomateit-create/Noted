@@ -1,0 +1,178 @@
+/*
+ * Jetons de design.
+ *
+ * Parti pris : du papier, pas un ecran. Des blancs nacres et des beiges tres
+ * clairs, tous legerement chauds — jamais de blanc pur en aplat, qui eblouit
+ * sur une session de trois heures et donne un air de page web vide. Les
+ * surfaces s'eclaircissent a mesure qu'elles se rapprochent : le bureau est le
+ * ton le plus soutenu, la feuille de notes le plus lumineux.
+ *
+ * Les noms decrivent un role, pas une teinte : changer de palette ne demande
+ * que de reecrire ce fichier.
+ */
+
+:root {
+  /* Formulaires, barres de defilement et menus natifs suivent le theme. */
+  color-scheme: light;
+
+  /* --- Surfaces, de la plus lointaine a la plus proche -------------------- */
+
+  /* Le bureau : ce sur quoi les pages sont posees. Le ton le plus soutenu. */
+  --paper-deep: #e9e2d6;
+  /* Surface de base des panneaux. */
+  --paper: #f6f2ea;
+  /* En-tetes de panneau, cartes, elements souleves. */
+  --paper-raised: #fcfaf5;
+  /* Menus et fenetres flottantes, au-dessus de tout le reste. */
+  --paper-overlay: #ffffff;
+
+  /* La feuille de notes : l'endroit le plus lumineux de l'ecran, parce que
+     c'est celui ou l'on ecrit. */
+  --paper-sheet: #fffefa;
+
+  /* --- Filets et survols -------------------------------------------------- */
+  --rule: #e4dccf;
+  --rule-strong: #d3c9b8;
+  --hover: #ece4d6;
+
+  --scroll-thumb: #cec4b2;
+  --scroll-thumb-hover: #b3a794;
+
+  /* La bulle de la question, dans le fil de discussion : un sable chaud, pose
+     sur un fil desormais clair. C'est le contraste qui la designe comme un
+     objet — pas un cadre, que Claude et ChatGPT ont tous deux abandonne. */
+  --chat-bubble: #f1ebdd;
+
+  /* --- Texte --------------------------------------------------------------
+     Jamais de noir pur : sur un fond creme, il vibre. Un brun tres sombre se
+     pose mieux et garde la chaleur de l'ensemble. */
+  --text: #2b2620;
+  --text-dim: #665d50;
+  --text-faint: #8a8071;
+  --text-ghost: #aca291;
+
+  /* --- Accent : laiton, comme la lampe de bureau --------------------------
+     Deux valeurs, parce qu'un accent lisible en texte et un accent agreable
+     en aplat ne sont pas la meme couleur sur fond clair. */
+  --brass: #ab7c1c; /* filets, cadres de focus, aplats decoratifs */
+  --brass-strong: #855f10; /* texte accentue et boutons pleins — 4,9:1 */
+  --brass-deep: #674907; /* survol des boutons pleins */
+  --on-brass: #fdf9f0; /* texte pose sur un aplat de laiton */
+
+  --brass-wash: rgba(196, 146, 40, 0.16);
+  --brass-line: rgba(171, 124, 28, 0.42);
+
+  /* --- Codes couleur des surlignages ------------------------------------
+     Repris tels quels de shared/types.ts. Toute modification doit se faire
+     des deux cotes. La pastille est assombrie pour rester lisible sur creme ;
+     le lavis reste clair, c'est lui qui passe derriere le texte. */
+  --hl-retenir: #c99a12;
+  --hl-incompris: #c0392b;
+  --hl-definition: #2e8b57;
+  --hl-formule: #2c6faf;
+  --hl-transversal: #7e4fb0;
+
+  /* --- Typographie ------------------------------------------------------
+     Chaque panneau a sa voix : les notes en serif de lecture, l'interface en
+     humanist sans, les formules en mono. On sait dans quel panneau on se
+     trouve sans avoir a le regarder. */
+  --font-ui: 'Avenir Next', 'Avenir', system-ui, sans-serif;
+  --font-read: 'Charter', 'Palatino', 'Hoefler Text', Georgia, serif;
+  --font-mono: 'Menlo', ui-monospace, monospace;
+
+  /* --- Surfaces d'accueil -----------------------------------------------
+     Le tableau de bord et les pages de matiere parlent une autre langue que
+     l'espace de travail : la ou celui-ci est une feuille de papier sur
+     laquelle on lit et on ecrit, ceux-la sont la coque de l'application. Type
+     systeme — SF Pro sur ce Mac —, filets d'un pixel, profondeur obtenue par
+     l'etagement des ombres plutot que par la bordure. */
+  --font-system: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+
+  /* Neutres a peine bleutes : sur un ecran, un gris parfaitement neutre
+     parait sale a cote d'un blanc pur. */
+  --shell-bg: #fafafb;
+  --shell-surface: #ffffff;
+  --shell-line: rgba(0, 0, 0, 0.075);
+  --shell-line-strong: rgba(0, 0, 0, 0.12);
+  --shell-text: #191a1f;
+  --shell-text-mid: #4b4c54;
+  --shell-text-dim: #85868f;
+  --shell-text-ghost: #a3a4ac;
+  --shell-danger: #d13b3b;
+
+  /* Le ressort d'Apple : depart franc, arrivee posee. */
+  --spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --swift: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* --- Verre de la coque d'accueil ---------------------------------------
+     Sur l'accueil, les trois sections — barre, laterale, page — flottent sur
+     le bureau creme comme des plaques de verre. La recette tient en trois
+     gestes : un fond transparent (le bureau se voit a travers), un flou
+     d'arriere-plan qui depolit ce qui passe derriere, et des ombres vers
+     l'interieur — l'arete qui accroche la lumiere en haut, la courbure qui
+     s'assombrit en bas. Le flou n'existe qu'a proportion de ce qu'il y a a
+     flouter : le bureau porte pour cela de discretes nappes de couleur
+     (app.css). Au survol, seule l'ombre portee respire.
+
+     L'ecart (--hub-gap) est repris en dur dans main/ipc.ts pour recentrer
+     les feux macOS dans la pilule : toute modification se fait des deux
+     cotes. */
+  --hub-gap: 8px;
+  /* Le blanc domine et le filtre eclaircit ce qu'il depolit : la plaque
+     reste nacree meme posee sur l'ivoire, le flou continue d'exister. */
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-blur: blur(22px) saturate(130%) brightness(1.08);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.55);
+  --glass-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.9),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.35),
+    inset 1.5px 0 1px -0.5px rgba(255, 255, 255, 0.6),
+    inset -1.5px 0 1px -0.5px rgba(255, 255, 255, 0.6),
+    inset 0 16px 30px -20px rgba(255, 255, 255, 0.9),
+    inset 0 -18px 30px -22px rgba(74, 58, 33, 0.2),
+    0 1px 2px rgba(74, 58, 33, 0.06),
+    0 10px 24px -8px rgba(74, 58, 33, 0.12);
+  --glass-shadow-hover:
+    inset 0 1px 1px rgba(255, 255, 255, 1),
+    inset 0 -1px 1px rgba(255, 255, 255, 0.4),
+    inset 1.5px 0 1px -0.5px rgba(255, 255, 255, 0.7),
+    inset -1.5px 0 1px -0.5px rgba(255, 255, 255, 0.7),
+    inset 0 16px 30px -20px rgba(255, 255, 255, 0.95),
+    inset 0 -18px 30px -22px rgba(74, 58, 33, 0.24),
+    0 2px 4px rgba(74, 58, 33, 0.07),
+    0 16px 34px -10px rgba(74, 58, 33, 0.17);
+
+  --text-xs: 11px;
+  --text-sm: 12.5px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 21px;
+
+  /* --- Rythme ----------------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 22px;
+  --space-6: 30px;
+  --space-8: 44px;
+
+  --radius-sm: 4px;
+  --radius: 7px;
+  --radius-lg: 11px;
+
+  /* --- Mouvement --------------------------------------------------------
+     Court et net. Rien ne rebondit : c'est un outil de travail, pas une
+     demonstration. */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --fast: 110ms;
+  --normal: 170ms;
+
+  /* Ombres brunes plutot que noires : une ombre grise sur un fond creme le
+     salit, une ombre chaude l'habite. */
+  --shadow-panel: 0 1px 2px rgba(74, 58, 33, 0.07), 0 6px 18px rgba(74, 58, 33, 0.08);
+  --shadow-pop: 0 2px 8px rgba(74, 58, 33, 0.1), 0 16px 40px rgba(74, 58, 33, 0.16);
+
+  --titlebar-height: 44px;
+}

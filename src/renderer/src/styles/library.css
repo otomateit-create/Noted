@@ -1,0 +1,486 @@
+.library-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  /* Pas au centre vertical : legerement haut, la ou l'oeil va naturellement. */
+  padding-top: 13vh;
+  /* Voile leger : sur fond clair, un rideau sombre ferait sursauter. Il suffit
+     de faire reculer l'arriere-plan, pas de l'eteindre. */
+  background: rgba(58, 48, 34, 0.26);
+  backdrop-filter: blur(3px);
+  animation: backdrop-in 130ms var(--ease);
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.library {
+  width: min(620px, 88vw);
+  max-height: 66vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  animation: library-in 150ms var(--ease);
+}
+
+@keyframes library-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.99);
+  }
+}
+
+/* --- Recherche -------------------------------------------------------------- */
+
+.library-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--rule);
+  flex: none;
+}
+
+.library-input {
+  flex: 1;
+  font-size: var(--text-lg);
+  font-family: var(--font-read);
+  color: var(--text);
+  user-select: text;
+  cursor: text;
+}
+
+.library-input::placeholder {
+  color: var(--text-ghost);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+}
+
+.library-escape {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-ghost);
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 2px 5px;
+  flex: none;
+}
+
+/* --- Resultats --------------------------------------------------------------- */
+
+.library-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.library-empty {
+  padding: var(--space-5);
+  text-align: center;
+  color: var(--text-ghost);
+  font-size: var(--text-sm);
+}
+
+.library-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background-color var(--fast) var(--ease);
+}
+
+/* La ligne ouvre le cours ; le bouton de gestion vit a cote, jamais dedans —
+   un bouton dans un bouton n'est ni du HTML valide ni cliquable de facon sure. */
+.library-row-open {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.library-row[data-active='true'] {
+  background: var(--hover);
+}
+
+/* Un filet laiton marque le cours deja ouvert, sans le confondre avec la
+   ligne survolee. */
+.library-row[data-current='true'] {
+  box-shadow: inset 2px 0 0 var(--brass);
+}
+
+.library-row-subject {
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  min-width: 128px;
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-row-title {
+  font-family: var(--font-read);
+  font-size: var(--text-md);
+  color: var(--text-dim);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-row[data-active='true'] .library-row-title {
+  color: var(--text);
+}
+
+.library-row-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-ghost);
+  flex: none;
+}
+
+/* --- Gerer un cours ---------------------------------------------------------
+   Tout se passe dans la ligne elle-meme : renommer, choisir une matiere,
+   confirmer une suppression. Une fenetre par-dessus la palette ferait deux
+   couches empilees pour un geste qui tient sur une ligne. */
+
+.library-row-more {
+  flex: none;
+  width: 22px;
+  font-size: var(--text-md);
+  color: var(--text-ghost);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition:
+    opacity var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+/* Discret jusqu'a ce qu'on s'approche : la bibliotheque sert d'abord a ouvrir
+   un cours, pas a le gerer. */
+.library-row:hover .library-row-more,
+.library-row[data-active='true'] .library-row-more,
+.library-row-more:focus-visible {
+  opacity: 1;
+}
+
+.library-row-more:hover {
+  color: var(--brass-strong);
+  background: var(--paper-overlay);
+}
+
+.library-row--editing {
+  flex-wrap: wrap;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+}
+
+.library-row-choices {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+  flex: none;
+}
+
+.library-row-action {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.library-row-action:hover {
+  background: var(--paper-overlay);
+  color: var(--brass-strong);
+}
+
+.library-row-action--danger:hover,
+.tool-popover-item--danger:hover {
+  color: var(--hl-incompris);
+}
+
+.library-row-cancel {
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.library-row-cancel:hover {
+  color: var(--text-dim);
+}
+
+/* Le bouton qui detruit est le seul aplat plein de la palette : il doit se
+   distinguer d'un simple « valider » qu'on cliquerait par habitude. */
+.library-row-confirm {
+  font-size: var(--text-xs);
+  color: var(--on-brass);
+  background: var(--hl-incompris);
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-sm);
+  transition: opacity var(--fast) var(--ease);
+}
+
+.library-row-confirm:hover {
+  opacity: 0.86;
+}
+
+.library-row-confirm:disabled {
+  opacity: 0.5;
+}
+
+.library-row-danger {
+  font-size: var(--text-xs);
+  color: var(--hl-incompris);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  min-width: 128px;
+  flex: none;
+}
+
+.library-row-note {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  flex: 1;
+  min-width: 180px;
+}
+
+.library-row-error {
+  font-size: var(--text-xs);
+  color: var(--hl-incompris);
+  flex-basis: 100%;
+}
+
+.library-inline {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.library-inline-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-read);
+  font-size: var(--text-md);
+  color: var(--text);
+  border-bottom: 1px solid var(--brass-line);
+  user-select: text;
+  cursor: text;
+}
+
+/* --- Import ------------------------------------------------------------------- */
+
+.library-footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.library-footer-label {
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex: none;
+}
+
+.library-import {
+  display: flex;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.library-import-button {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  padding: 3px var(--space-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.library-import-button:hover {
+  border-color: var(--brass-line);
+  color: var(--brass-strong);
+}
+
+/* --- Gerer une matiere ------------------------------------------------------
+   La pastille garde son role : cliquer le nom ajoute un cours. Le point de
+   suspension, lui, n'apparait qu'au survol et ouvre le menu. */
+
+.library-chip {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.library-chip .library-import-button {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.library-chip-more {
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+  padding: 3px var(--space-1);
+  border: 1px solid var(--rule-strong);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.library-chip:hover .library-chip-more {
+  color: var(--text-faint);
+}
+
+.library-chip-more:hover {
+  color: var(--brass-strong);
+  border-color: var(--brass-line);
+}
+
+/* Vers le haut : le pied de page est colle au bas de la palette. */
+.library-chip-menu {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 0;
+  z-index: 10;
+  min-width: 132px;
+}
+
+.library-chip-menu--wide {
+  min-width: 268px;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.library-chip-warning {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.library-inline .library-inline-input {
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  min-width: 120px;
+}
+
+/* --------------------------------------------------------------------------
+   Un cours en train d'etre fabrique a partir de photos
+
+   Il occupe une ligne comme un cours ordinaire, parce que c'en est un qui
+   arrive — mais il ne repond pas au clic : il n'existe pas encore.
+   -------------------------------------------------------------------------- */
+
+.library-row--pending {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.library-row--pending:hover {
+  background: transparent;
+}
+
+.library-row--pending[data-failed='true'] .library-row-meta {
+  color: var(--hl-incompris);
+}
+
+/* --- L'ordre des photos, avant de lancer -------------------------------------
+   Le meme cadre que la bibliotheque, avec la liste a la place des resultats :
+   c'est la meme fenetre et le meme geste, a un ecran d'avance. */
+
+.library-search--proposal {
+  align-items: flex-start;
+}
+
+.library-proposal-head {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.library-proposal-title {
+  font-family: var(--font-read);
+  font-size: var(--text-lg);
+  color: var(--text);
+}
+
+.library-proposal-meta {
+  font-size: var(--text-sm);
+  color: var(--text-ghost);
+}
+
+.library-proposal-list {
+  list-style: none;
+  margin: 0;
+}
+
+.library-proposal-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+}
+
+/* Le rang est ce qu'on vient verifier : il est aligne a droite pour que les
+   dizaines ne decalent pas les noms, et en chiffres a chasse fixe. */
+.library-proposal-rank {
+  flex: none;
+  width: 2.2em;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+}
+
+.library-proposal-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+}
+
+.library-footer--proposal .library-footer-label {
+  flex: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: var(--text-sm);
+}

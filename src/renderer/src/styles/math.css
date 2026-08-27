@@ -1,0 +1,72 @@
+/*
+ * Mise en page des formules.
+ *
+ * KaTeX apporte ses propres polices et sa typographie mathematique ; ce qui
+ * suit ne fait que l'accorder au reste de l'application — sa taille par rapport
+ * au texte courant, sa respiration verticale, et son comportement quand une
+ * formule est plus large que la colonne.
+ */
+
+.katex {
+  /* KaTeX se rend un peu petit a cote d'un serif de lecture : on le remonte
+     juste assez pour que les indices restent lisibles. */
+  font-size: 1.06em;
+}
+
+/* Formule isolee : centree, avec de l'air au-dessus et en dessous, comme dans
+   un manuel. C'est ce qui la distingue d'une formule au fil du texte. */
+.katex-display {
+  margin: 1.15em 0;
+  padding: 0.15em 0;
+  /* Une longue equation defile dans son coin plutot que d'elargir la colonne
+     et de faire deborder tout le panneau. */
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.katex-display > .katex {
+  font-size: 1.1em;
+}
+
+/* Une formule fausse s'affiche en rouge plutot que de faire disparaitre le
+   texte autour. Le ton est celui du code couleur « pas compris ». */
+.katex .katex-error {
+  color: var(--hl-incompris);
+}
+
+/* --- Formules dans l'editeur de notes --------------------------------------
+   Elles restent des objets modifiables : le survol le signale, et la selection
+   les entoure comme n'importe quel autre element choisi. */
+
+.notes-editor [data-type='inline-math'],
+.notes-editor [data-type='block-math'] {
+  border-radius: 3px;
+  transition: background-color var(--fast) var(--ease);
+}
+
+.notes-editor [data-type='inline-math']:hover,
+.notes-editor [data-type='block-math']:hover {
+  background: var(--brass-wash);
+  cursor: pointer;
+}
+
+.notes-editor [data-type='block-math'] {
+  display: block;
+  text-align: center;
+  margin: 1.1em 0;
+}
+
+.notes-editor [data-type='inline-math'].ProseMirror-selectednode,
+.notes-editor [data-type='block-math'].ProseMirror-selectednode {
+  background: var(--brass-wash);
+  box-shadow: 0 0 0 2px var(--brass-line);
+}
+
+/* Une formule vide serait invisible et impossible a rattraper au clic. */
+.notes-editor [data-type='inline-math']:empty::before,
+.notes-editor [data-type='block-math']:empty::before {
+  content: 'formule vide';
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+}

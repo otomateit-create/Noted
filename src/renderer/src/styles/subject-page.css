@@ -1,0 +1,343 @@
+/*
+ * Page de matiere — une page de la coque comme les autres (hub.css).
+ *
+ * Ni glace ni flou ici : la page vit dans la plaque de verre du shell, qui ne
+ * tolere pas de backdrop-filter en dessous d'elle (son clip-path permanent
+ * coupe la racine de flou de tout descendant — voir le commentaire de
+ * .hub-main). Les panneaux sont donc des surfaces pleines, comme .hub-rows ou
+ * .fc-panel. Ce qui reste propre a la matiere : un lavis colore qui emprunte
+ * sa teinte a la carte du tableau de bord — on sait ou l'on se trouve avant
+ * d'avoir lu le titre.
+ */
+
+.matter {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-5);
+  font-family: var(--font-system);
+  /* Trois foyers plutot qu'un degrade lineaire : la lumiere doit sembler
+     venir de quelque part, pas balayer l'ecran d'un bord a l'autre. Un lavis
+     plutot qu'un aplat : la page vit dans la plaque de verre du shell, qui
+     porte deja sa propre lumiere (app.css). */
+  background:
+    radial-gradient(
+      760px 420px at 12% 0%,
+      color-mix(in srgb, var(--tint-from) 20%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      680px 480px at 88% 10%,
+      color-mix(in srgb, var(--tint-to) 14%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      620px 520px at 62% 98%,
+      color-mix(in srgb, var(--tint-from) 12%, transparent),
+      transparent 62%
+    );
+}
+
+.matter-inner {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* --- En-tete -------------------------------------------------------------- */
+
+.matter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.matter-id {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* L'orbe reprend le degrade de la carte, en petit : la meme matiere, vue
+   de plus pres. Le liseré clair en haut fait la goutte de lumiere. */
+.matter-orb {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: linear-gradient(150deg, var(--tint-from), var(--tint-to));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 2px 6px color-mix(in srgb, var(--tint-to) 35%, transparent);
+}
+
+.matter-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 640;
+  letter-spacing: -0.024em;
+  color: #14171d;
+}
+
+.matter-count {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: #5d636e;
+}
+
+/* --- Boutons de verre ----------------------------------------------------- */
+
+.glass-button {
+  flex: none;
+  padding: var(--space-2) 15px;
+  border-radius: 10px;
+  font-family: var(--font-system);
+  font-size: 13.5px;
+  font-weight: 510;
+  color: #14171d;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+  transition:
+    background-color var(--fast) var(--swift),
+    border-color var(--fast) var(--swift),
+    transform var(--fast) var(--spring);
+}
+
+.glass-button:hover {
+  background: rgba(0, 0, 0, 0.035);
+  border-color: var(--shell-line-strong);
+}
+.glass-button:active { transform: scale(0.97); }
+.glass-button:disabled { opacity: 0.6; }
+
+.glass-button--quiet {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: #4e545f;
+}
+
+.glass-button--quiet:hover {
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.glass-button--danger {
+  background: rgba(209, 59, 59, 0.92);
+  border-color: transparent;
+  color: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    0 1px 3px rgba(120, 20, 20, 0.24);
+}
+
+.glass-button--danger:hover { background: rgba(190, 48, 48, 0.96); }
+
+/* --- Le panneau des cours ------------------------------------------------- */
+
+.matter-rows {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1);
+  border-radius: 16px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+}
+
+.matter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 3px 6px;
+  border-radius: 11px;
+  transition: background-color var(--fast) var(--swift);
+}
+
+.matter-row:hover { background: rgba(0, 0, 0, 0.04); }
+
+.matter-row-open {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: 9px var(--space-2);
+  text-align: left;
+}
+
+.matter-format {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  padding: 1.5px 4px;
+  border-radius: 4px;
+  color: #6b717d;
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.matter-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  letter-spacing: -0.008em;
+  color: #2c313a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Un cours qui arrive --------------------------------------------------
+   Une serie d'images se lit en plusieurs minutes. La ligne tient sa place dans
+   la liste pendant ce temps, mais en retrait : elle ne s'ouvre pas encore. */
+
+.matter-row--pending { opacity: 0.62; }
+
+.matter-row--pending:hover { background: none; }
+
+.matter-row-open--still { cursor: default; }
+
+.matter-row-progress {
+  flex: none;
+  font-size: 12.5px;
+  letter-spacing: -0.004em;
+  color: #6b717d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matter-row-actions--shown { opacity: 1; }
+
+/* --- Gerer un cours -------------------------------------------------------
+   Discrets jusqu'a ce qu'on s'approche : la page sert d'abord a ouvrir un
+   cours, pas a le gerer. */
+
+.matter-row-actions {
+  flex: none;
+  display: flex;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity var(--fast) var(--swift);
+}
+
+.matter-row:hover .matter-row-actions,
+.matter-row-actions:focus-within {
+  opacity: 1;
+}
+
+.matter-action {
+  font-family: var(--font-system);
+  font-size: 12.5px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  color: #6b717d;
+  transition:
+    background-color var(--fast) var(--swift),
+    color var(--fast) var(--swift);
+}
+
+.matter-action:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #14171d;
+}
+
+.matter-action--danger:hover {
+  background: rgba(209, 59, 59, 0.14);
+  color: #c33;
+}
+
+/* --- Renommer, supprimer -------------------------------------------------- */
+
+.matter-row--editing {
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-2);
+  background: rgba(0, 0, 0, 0.035);
+}
+
+.matter-rename {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.matter-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-family: var(--font-system);
+  font-size: 14.5px;
+  letter-spacing: -0.008em;
+  color: #14171d;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(20, 30, 50, 0.12);
+  caret-color: #2f6df6;
+  user-select: text;
+  cursor: text;
+}
+
+.matter-rename-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1.5px #2f6df6;
+}
+
+.matter-row-danger {
+  flex: 1;
+  min-width: 0;
+  padding-left: var(--space-2);
+  font-size: 13.5px;
+  color: #a52d2d;
+}
+
+.matter-row-choices {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.matter-row-hint {
+  flex: none;
+  font-size: var(--text-xs);
+  color: #767c88;
+}
+
+.matter-row-error {
+  flex-basis: 100%;
+  padding: var(--space-1) var(--space-2) 0;
+  font-size: var(--text-xs);
+  color: #c33;
+}
+
+/* --- Etats ---------------------------------------------------------------- */
+
+.matter-empty {
+  margin: 0;
+  padding: var(--space-5) 0;
+  font-size: 13.5px;
+  color: #767c88;
+}
+
+.matter-error {
+  margin: 0;
+  font-size: 13.5px;
+  color: #c33;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-button,
+  .matter-row,
+  .matter-row-actions {
+    transition-duration: 0.001ms;
+  }
+}

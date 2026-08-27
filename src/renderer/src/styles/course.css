@@ -1,0 +1,908 @@
+/* Le double nom de classe n'est pas decoratif : `.panel-body` pose
+   `overflow-x: hidden` et se trouve plus loin dans la feuille finale. A
+   specificite egale, c'est lui qui l'emportait — le glissement lateral etait
+   annule par une regle ecrite ailleurs. */
+.panel-body.course-body {
+  display: flex;
+  flex-direction: column;
+  /* « safe » est ce qui rend une page grossie parcourable : un centrage
+     ordinaire pousse ce qui deborde a gauche hors d'atteinte — la barre de
+     defilement ne va jamais avant le bord gauche du cadre, et la moitie gauche
+     du document devenait inaccessible. Avec « safe », des que le contenu est
+     plus large que le panneau, il s'aligne a gauche et se parcourt en entier. */
+  align-items: safe center;
+  /* Le repere des reperes d'ancrage, qui se posent en absolu dedans et
+     defilent donc avec le document. */
+  position: relative;
+  /* Deux doigts glisses lateralement sur le trackpad deplacent alors la page. */
+  overflow-x: auto;
+  gap: var(--space-4);
+  /* Aucun coussin : la premiere page commence au bord haut du cadre, la
+     derniere finit au bord bas, et les angles arrondis du panneau rognent les
+     coins du document. C'est ce leger rognage qu'on prefere a la bande de fond
+     qu'une marge laissait apparaitre. Le `gap` reste : il separe les pages
+     entre elles, ce qui n'a rien a voir avec ce qui separe du cadre. */
+  padding: 0;
+  /* La barre de defilement gardait onze pixels sur la droite en permanence —
+     `global.css` la declare a cette largeur, ce qui la rend classique et non
+     flottante. La page ne pouvait donc pas toucher le bord droit du cadre. On
+     la masque ici, et ici seulement : le cours se parcourt au trackpad, et le
+     tiroir de commandes porte deja le numero de page. */
+  scrollbar-width: none;
+  /* Un fond plus profond que le panneau fait ressortir les pages comme des
+     feuilles posees dessus. */
+  background: var(--paper-deep);
+}
+
+.panel-body.course-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Halo bref a l'arrivee d'une citation, pour situer la page dans le defilement. */
+.pdf-page-slot {
+  border-radius: 5px;
+  transition: box-shadow 260ms var(--ease);
+}
+
+.pdf-page-slot[data-flashed='true'] {
+  box-shadow: 0 0 0 3px var(--brass-line);
+}
+
+.pdf-page {
+  position: relative;
+  background: var(--paper-overlay);
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: var(--shadow-panel);
+  transition: opacity var(--normal) var(--ease);
+}
+
+/* Tant que la page n'est pas peinte, on montre un rectangle a la bonne taille
+   plutot qu'un vide : la barre de defilement garde sa longueur et ne saute
+   pas sous le curseur. */
+.pdf-page[data-painted='false'] {
+  opacity: 0.55;
+  background-image: linear-gradient(
+    180deg,
+    var(--paper-raised) 0%,
+    var(--paper) 50%,
+    var(--paper-raised) 100%
+  );
+}
+
+.pdf-canvas {
+  display: block;
+}
+
+/* --- Les renvois du document -----------------------------------------------
+   Le sommaire d'un PDF porte de vrais liens, mais ils ne sont nulle part dans
+   l'image peinte : ce sont des rectangles declares a cote de la page. On les
+   pose ici par-dessus la couche de texte, sans rien changer a l'oeil — la
+   couche ne prend pas les clics, seules ses boites le font, et la selection
+   continue donc de commencer partout ailleurs. */
+
+.pdf-link-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pdf-link {
+  position: absolute;
+  pointer-events: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  /* Rien au repos : c'est le document qu'on lit, pas nos rectangles. Le survol
+     suffit a dire qu'il y a la quelque chose a suivre. */
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+
+.pdf-link:hover {
+  background: var(--brass-wash);
+}
+
+.pdf-link:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 1px;
+}
+
+/* Numero de page en filigrane dans le coin, visible seulement au survol. Il
+   passe au-dessus de la couche de texte, qui couvre toute la page. */
+.pdf-page-number {
+  position: absolute;
+  z-index: 2;
+  /* Il ne s'actionne pas, et il est invisible hors survol : le laisser prendre
+     les clics ouvrait un rectangle mort de 25 x 14 px au coin de chaque page,
+     ou aucune selection ne pouvait ni commencer ni finir. */
+  pointer-events: none;
+  right: 8px;
+  bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  /* Cette pastille flotte au-dessus du contenu de la page, dont on ne maitrise
+     ni le fond ni les couleurs : un jeton clair y serait parfois invisible.
+     Un aplat sombre a texte creme se lit sur n'importe quel document. */
+  color: #f4efe4;
+  background: rgba(43, 38, 32, 0.74);
+  padding: 1px 5px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.pdf-page:hover .pdf-page-number {
+  opacity: 1;
+}
+
+/* --- Pagination ----------------------------------------------------------- */
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.pager-position {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  min-width: 54px;
+  justify-content: center;
+}
+
+.pager-current {
+  color: var(--text-dim);
+}
+
+.pager-total {
+  color: var(--text-ghost);
+}
+
+/* Le compteur est aussi le champ de saisie : au survol, il s'annonce comme
+   cliquable sans pour autant se transformer en bouton visible. */
+button.pager-position {
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-1);
+  transition: background-color var(--fast) var(--ease);
+}
+
+button.pager-position:hover {
+  background: var(--hover);
+}
+
+button.pager-position:hover .pager-current {
+  color: var(--brass-strong);
+}
+
+.pager-input {
+  width: 30px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-align: right;
+  color: var(--brass-strong);
+  border-bottom: 1px solid var(--brass-line);
+  user-select: text;
+  cursor: text;
+}
+
+/* --- Recherche dans le cours (⌘F) ------------------------------------------
+   Posee sous l'en-tete du panneau, pas en flottant par-dessus le document :
+   elle reste visible pendant qu'on parcourt les occurrences, et ne masque
+   jamais le passage qu'on vient de trouver. */
+
+.finder {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-raised);
+  border-bottom: 1px solid var(--rule);
+}
+
+.finder-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.finder-glyph {
+  font-size: var(--text-md);
+  color: var(--text-ghost);
+  flex: none;
+}
+
+.finder-input {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-base);
+  color: var(--text);
+  user-select: text;
+  cursor: text;
+}
+
+.finder-input::placeholder {
+  color: var(--text-ghost);
+}
+
+.finder-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+  flex: none;
+}
+
+.finder-results {
+  max-height: 216px;
+  overflow-y: auto;
+  border-top: 1px solid var(--rule);
+  padding: var(--space-1);
+}
+
+.finder-result {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background-color var(--fast) var(--ease);
+}
+
+.finder-result:hover {
+  background: var(--hover);
+}
+
+.finder-result[data-current='true'] {
+  background: var(--brass-wash);
+}
+
+.finder-result-anchor {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  flex: none;
+  min-width: 46px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finder-result-text {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.finder-result-mark {
+  background: none;
+  color: var(--brass-strong);
+  font-weight: 600;
+}
+
+/* Surlignage des occurrences dans un document Word ou Markdown. Il ne passe
+   par aucune balise : le navigateur peint des etendues, ce qui laisse intact
+   le HTML rendu par React. */
+::highlight(noted-find) {
+  background-color: var(--brass-wash);
+}
+
+::highlight(noted-find-current) {
+  background-color: var(--brass);
+  color: var(--on-brass);
+}
+
+/* --- Echec de lecture ------------------------------------------------------
+   Bandeau fixe entre l'en-tete et le document. Il ne defile pas : un message
+   qui explique pourquoi rien ne s'affiche n'a aucune valeur s'il quitte l'ecran
+   au premier mouvement. */
+
+.course-error {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-4);
+  background: color-mix(in srgb, var(--hl-incompris) 8%, var(--paper));
+  border-bottom: 1px solid color-mix(in srgb, var(--hl-incompris) 30%, var(--rule));
+  font-size: var(--text-sm);
+}
+
+.course-error strong {
+  color: var(--hl-incompris);
+  font-weight: 600;
+}
+
+.course-error span {
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+/* --- Etat de la recherche par le sens --------------------------------------
+   Un point pose contre l'etiquette du panneau. Il ne dit rien tant que tout va
+   bien — vert, il se fond dans la barre — et ne se signale qu'en travaillant
+   ou en echouant. */
+
+/* --- Le tiroir de commandes du cours ---------------------------------------
+   Le bandeau a disparu : la page prend toute la hauteur du panneau, et les
+   commandes vivent dans un tiroir centre en haut. Rentre par defaut : le
+   conteneur est remonte au-dessus du bord (le `overflow: hidden` du panneau
+   rogne la barre) et seule l'encoche depasse. Le clic sur l'encoche fait
+   coulisser l'ensemble.
+
+   Le retrait est exprime en pourcentage de la hauteur du conteneur : dans un
+   panneau etroit, la barre se replie sur deux lignes (`flex-wrap`) et le
+   calcul reste juste sans rien mesurer. */
+.course-float {
+  position: absolute;
+  top: 0;
+  /* Centre sans `left: 50%` : en absolu, `left: 50%` ne laisse que la moitie
+     du panneau comme place disponible et la barre se repliait a tort. Les
+     deux bords plus `margin-inline: auto` sur une largeur au contenu centrent
+     avec toute la largeur pour s'etaler. */
+  left: var(--space-2);
+  right: var(--space-2);
+  margin-inline: auto;
+  width: fit-content;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateY(calc(-100% + 15px));
+  transition: transform 240ms var(--swift);
+}
+
+.course-float[data-open='true'] {
+  transform: translateY(0);
+}
+
+/* La barre elle-meme : accrochee au bord superieur, arrondie vers le bas,
+   translucide et floutee pour laisser deviner la page qui defile dessous. */
+.course-float-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 100%;
+  padding: 4px 8px;
+  background: rgba(252, 250, 245, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--rule);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 3px 10px rgba(74, 58, 33, 0.08);
+}
+
+/* L'encoche : une languette sous la barre, seule visible tiroir rentre. Le
+   chevron pointe vers le geste — sortir quand c'est range, ranger sinon. */
+.course-float-notch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 15px;
+  /* Fond le filet de l'encoche avec celui de la barre au-dessus. */
+  margin-top: -1px;
+  background: rgba(252, 250, 245, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--rule);
+  border-top: none;
+  border-radius: 0 0 9px 9px;
+  color: var(--text-ghost);
+  box-shadow: 0 2px 6px rgba(74, 58, 33, 0.08);
+  transition:
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+.course-float-notch:hover {
+  background: var(--paper-overlay);
+  color: var(--text-dim);
+}
+
+.course-float-notch svg {
+  transition: transform 240ms var(--swift);
+}
+
+.course-float[data-open='true'] .course-float-notch svg {
+  transform: rotate(180deg);
+}
+
+/* Le point de vectorisation n'est pas un bouton : un peu d'air a la place du
+   coussin que les autres tirent de leur propre boite. */
+.course-float .vector-dot {
+  margin: 0 5px;
+}
+
+.vector-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-ghost);
+  transition: background var(--normal) var(--ease);
+}
+
+/* Les trois etats du traitement, dans l'ordre ou ils se succedent : rouge tant
+   que le decoupage large n'est pas ecrit, orange pendant l'affinage, vert quand
+   tout est fait. La couleur ne dit donc pas « ca marche / ca ne marche pas »,
+   elle dit ou l'on en est — et c'est l'infobulle qui precise ce qui est deja
+   utilisable a chaque etape. */
+.vector-dot[data-phase='attente'],
+.vector-dot[data-phase='calcul'] {
+  background: var(--hl-incompris);
+}
+
+.vector-dot[data-phase='affine'] {
+  background: var(--brass);
+}
+
+/* La pulsation dit « ca avance », et elle seule. L'attente pulse aussi : c'est
+   le temps de la lecture des figures et du decoupage, ou tout se passe deja,
+   meme si aucun compteur ne monte encore. L'echec, lui, est creux et immobile. */
+.vector-dot[data-phase='attente'],
+.vector-dot[data-phase='calcul'],
+.vector-dot[data-phase='affine'] {
+  animation: vector-pulse 1.6s ease-in-out infinite;
+}
+
+.vector-dot[data-phase='complet'] {
+  background: var(--hl-definition);
+}
+
+/* L'echec est creux, et c'est ce qui le distingue du rouge plein du debut : le
+   rouge est devenu une etape du parcours, il ne pouvait plus signifier l'arret
+   a lui tout seul. */
+.vector-dot[data-phase='echec'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--hl-incompris);
+}
+
+@keyframes vector-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* --- Progression de l'extraction ------------------------------------------
+   Le cours est lisible immediatement ; cette barre signale que le texte part
+   vers Claude en arriere-plan. */
+
+.extraction-bar {
+  position: relative;
+  flex: none;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  background: var(--paper);
+  border-top: 1px solid var(--rule);
+  overflow: hidden;
+}
+
+.extraction-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--brass-wash);
+  transition: width 220ms var(--ease);
+}
+
+.extraction-label {
+  position: relative;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  letter-spacing: 0.03em;
+}
+
+/* --- Documents sans pagination : Word et Markdown --------------------------
+   Presentes comme une feuille unique posee sur le bureau, dans le meme esprit
+   que les pages d'un PDF. Le panneau garde ainsi son unite quel que soit le
+   format du cours ouvert. */
+
+/* La feuille touche les bords du cadre comme une page de PDF : quel que soit le
+   format ouvert, le document remplit la section. Ce sont les 30 px de coussin
+   interieur, plus bas, qui donnent son air au texte — pas une marge exterieure.
+   Le plafond de 760 px, lui, ne cede pas : c'est la longueur de ligne au-dela
+   de laquelle l'oeil ne retrouve plus le debut de la suivante, et il n'entre en
+   jeu que dans un panneau deja tres large. */
+.document-render {
+  width: min(100%, 760px);
+  background: var(--paper-overlay);
+  border-radius: 3px;
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-6) var(--space-6) var(--space-8);
+  font-family: var(--font-read);
+  font-size: var(--text-md);
+  line-height: 1.7;
+  color: var(--text);
+  cursor: text;
+}
+
+.document-render > div > * + * {
+  margin-top: 0.8em;
+}
+
+.document-render h1,
+.document-render h2,
+.document-render h3,
+.document-render h4,
+.document-render h5,
+.document-render h6 {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  line-height: 1.28;
+  margin: 1.5em 0 0.45em;
+}
+
+.document-render h1 {
+  font-size: 1.42em;
+  letter-spacing: -0.01em;
+}
+
+.document-render h2 {
+  font-size: 1.2em;
+}
+
+.document-render h3 {
+  font-size: 1.05em;
+}
+
+.document-render h4,
+.document-render h5,
+.document-render h6 {
+  font-size: 1em;
+  color: var(--text-dim);
+}
+
+.document-render ul,
+.document-render ol {
+  padding-left: 1.35em;
+}
+
+.document-render li + li {
+  margin-top: 0.22em;
+}
+
+.document-render li::marker {
+  color: var(--text-faint);
+}
+
+.document-render blockquote {
+  margin-left: 0;
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--brass-line);
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.document-render a {
+  color: var(--brass-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.document-render code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.08em 0.35em;
+}
+
+/* L'interligne du corps de texte est fait pour de la prose ; sur trente lignes
+   de code il disloque le bloc, et l'oeil ne suit plus l'indentation.
+
+   Les lignes trop longues reviennent a la ligne plutot que de sortir du cadre :
+   le panneau du cours n'occupe qu'un tiers de l'ecran, et faire defiler
+   horizontalement dix-sept blocs l'un apres l'autre pour lire la fin de chaque
+   ligne n'est pas une lecture. */
+.document-render pre {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  overflow-x: auto;
+  line-height: 1.5;
+  tab-size: 4;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.document-render pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.document-render img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 3px;
+  /* Sans cela, un appui maintenu sur une figure amorce le glisser natif de
+     l'image, qui prend la place de l'extension de la selection. */
+  -webkit-user-drag: none;
+}
+
+.document-render hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: var(--space-5) 0;
+}
+
+/* Les tableaux d'un cours de finance sont souvent plus larges que la colonne :
+   ils defilent dans leur coin plutot que d'elargir toute la page. */
+.document-render table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.document-render th,
+.document-render td {
+  border: 1px solid var(--rule-strong);
+  padding: 5px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.document-render th {
+  background: var(--paper);
+  font-weight: 600;
+}
+
+/* L'alignement demande par le document. Sans ces deux regles, la colonne de
+   gauche ci-dessus l'emporte sur l'attribut, et une colonne de montants cadree
+   a droite dans le fichier s'affiche a gauche — les chiffres ne s'y comparent
+   plus d'un coup d'oeil. */
+.document-render th[align='center'],
+.document-render td[align='center'] {
+  text-align: center;
+}
+
+.document-render th[align='right'],
+.document-render td[align='right'] {
+  text-align: right;
+}
+
+/* Signale qu'un element de Word n'a pas de traduction exacte a l'ecran, sans
+   inquieter : le detail complet est dans l'infobulle. */
+.document-warning {
+  margin: 0 0 var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  cursor: help;
+}
+
+/* --------------------------------------------------------------------------
+   Bandeau d'un cours reconstitue par lecture d'images
+
+   Hors de la zone defilante, comme le message d'erreur : le retour a l'original
+   doit rester a portee de clic ou qu'on en soit dans le cours.
+   -------------------------------------------------------------------------- */
+
+.ocr-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: color-mix(in srgb, var(--brass) 5%, var(--paper));
+  border-bottom: 1px solid color-mix(in srgb, var(--brass) 22%, var(--rule));
+}
+
+.ocr-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--brass) 10%, transparent);
+}
+
+.ocr-tab {
+  padding: 3px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.ocr-tab:hover {
+  color: var(--text);
+}
+
+.ocr-tab[data-active='true'] {
+  background: var(--paper-sheet);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.ocr-note {
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* L'original : des pages a regarder, rien d'accrochable. */
+/* Sans coussin, comme le corps du panneau : les pages dessinees ici le sont a
+   la largeur pleine du cadre, et le moindre retrait les ferait deborder. */
+.original-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0;
+}
+
+.original-view img,
+.original-page {
+  max-width: 100%;
+  height: auto;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+/* L'original d'un cours Markdown : le fichier tel quel, sans rendu. */
+.original-text {
+  align-self: stretch;
+  margin: 0;
+  padding: var(--space-4);
+  background: var(--paper-sheet);
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* L'original d'un cours Word : le meme rendu que le panneau de cours, en
+   consultation seule. */
+.original-docx {
+  align-self: stretch;
+  padding: var(--space-4);
+  background: var(--paper-sheet);
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+/* Temoin de lecture en cours, dans l'onglet « Texte lu ». */
+.ocr-spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border: 1.5px solid color-mix(in srgb, var(--brass) 35%, transparent);
+  border-top-color: var(--brass);
+  border-radius: 50%;
+  animation: ocr-turn 700ms linear infinite;
+}
+
+@keyframes ocr-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ocr-tab:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+/* Le bandeau ne doit pas se laisser ecraser par un long nom de fichier. */
+.ocr-banner .ocr-tabs {
+  flex: none;
+}
+
+/* --------------------------------------------------------------------------
+   Le meme bandeau, quand il pose une question
+
+   Une phrase entiere, et non un nom de fichier : elle doit pouvoir passer a la
+   ligne plutot que d'etre coupee, et les deux reponses rester a droite, la ou
+   se posent les boutons partout ailleurs.
+   -------------------------------------------------------------------------- */
+
+.ocr-banner--asking .ocr-note {
+  flex: 1;
+  overflow: visible;
+  white-space: normal;
+  color: var(--text);
+}
+
+.ocr-choices {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.ocr-choice {
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--brass) 30%, var(--rule));
+  border-radius: 5px;
+  background: var(--paper-sheet);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.ocr-choice:hover {
+  color: var(--text);
+}
+
+.ocr-choice--go {
+  border-color: transparent;
+  background: var(--brass);
+  color: var(--paper);
+  font-weight: 600;
+}
+
+.ocr-choice--go:hover {
+  color: var(--paper);
+  filter: brightness(1.06);
+}
+
+.ocr-choice:disabled {
+  cursor: default;
+  opacity: 0.75;
+  filter: none;
+}
+
+/* --------------------------------------------------------------------------
+   Un cours reconstitue auquel il manque des pages
+
+   La meme barre que le bandeau, mais en avertissement : elle dit ce qui
+   manque et propose de poursuivre la lecture depuis l'original archive.
+   -------------------------------------------------------------------------- */
+
+.ocr-missing {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: color-mix(in srgb, var(--brass) 12%, var(--paper));
+  border-bottom: 1px solid color-mix(in srgb, var(--brass) 30%, var(--rule));
+}
+
+.ocr-missing .ocr-note {
+  flex: 1;
+  overflow: visible;
+  white-space: normal;
+  color: var(--text);
+}
+
+.ocr-missing .ocr-choice {
+  flex: none;
+}

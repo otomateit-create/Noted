@@ -1,0 +1,93 @@
+/* La legende vit dans le bandeau du panneau du cours, et n'ouvre son rectangle
+   qu'a la demande : la place appartient au document. */
+
+.legend {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.legend-trigger {
+  font-size: var(--text-xs);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/*
+ * Le rectangle flotte sous le bouton, cale a droite pour ne pas deborder du
+ * panneau. Le retrait du haut est transparent et sert de pont : sans lui,
+ * l'espace entre le bouton et le rectangle serait un hors-zone, et la souris
+ * refermerait la legende en descendant vers elle.
+ */
+.legend-pop {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 30;
+  padding-top: 5px;
+}
+
+.legend-items {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 286px;
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+}
+
+.legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.legend-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+  /* Cale la pastille sur la premiere ligne de texte a cote. */
+  margin-top: 4px;
+}
+
+/* Le libelle et son sens s'empilent : dans un rectangle flottant, rien
+   n'oblige plus a les tronquer comme le faisait le panneau etroit. */
+.legend-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.legend-label {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+.legend-meaning {
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+  line-height: 1.35;
+}
+
+.legend-key {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-ghost);
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0 4px;
+  flex: none;
+  margin-top: 1px;
+}

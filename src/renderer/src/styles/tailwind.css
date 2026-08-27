@@ -1,0 +1,20 @@
+/*
+ * Tailwind, sans son preflight.
+ *
+ * L'application a deja ses propres remises a zero (global.css) et 2 800 lignes
+ * de CSS ecrites contre elles : importer le preflight de Tailwind les
+ * ecraserait. On ne prend donc que le theme (les variables) et les utilitaires.
+ *
+ * Les utilitaires sont importes hors de tout @layer, expres : les regles non
+ * couchees de global.css (button, input…) l'emporteraient sinon sur n'importe
+ * quelle classe Tailwind, cascade oblige. A plat, c'est la specificite normale
+ * qui tranche, et une classe bat un selecteur d'element.
+ */
+@layer theme;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css';
+
+/* L'application est claire, point. Le variant dark: ne doit jamais s'activer,
+   meme quand macOS est en sombre : on l'accroche a un attribut qu'on ne pose
+   nulle part. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));

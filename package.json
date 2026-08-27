@@ -1,0 +1,108 @@
+{
+  "name": "noted",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Espace de travail local pour etudier ses cours : document, notes et IA sur un meme ecran.",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "//dev": "env -u : certains terminaux integres (Claude Code, VS Code) sont eux-memes des applications Electron et exportent ELECTRON_RUN_AS_NODE=1, ce qui ferait demarrer Noted en simple processus Node, sans fenetre.",
+    "dev": "env -u ELECTRON_RUN_AS_NODE electron-vite dev",
+    "build": "electron-vite build",
+    "start": "env -u ELECTRON_RUN_AS_NODE electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "package": "electron-vite build && electron-builder --mac --dir",
+    "//installer": "Boucle de mise a jour : reconstruit puis remplace l'application installee. ditto plutot que cp, c'est lui qui copie correctement un bundle macOS. La sortie intermediaire est effacee ensuite, sinon Spotlight indexe deux Noted et on ne sait plus laquelle on ouvre. Fermer Noted avant.",
+    "verifier-moteur": "node scripts/verifier-moteur.mjs",
+    "//synchroniser-prompts": "Recopie les prompts du vault (la source de verite) dans les graines du depot. Tourne avant chaque construction : sans lui, le depot cesserait de dire ce que fait l'application des la premiere modification faite dans l'ecran Parametres.",
+    "synchroniser-prompts": "node scripts/synchroniser-prompts.mjs",
+    "installer": "npm run synchroniser-prompts && npm run package && rm -rf /Applications/Noted.app && ditto release/mac-arm64/Noted.app /Applications/Noted.app && rm -rf release/mac-arm64 && npm run verifier-moteur && echo 'Noted installee dans /Applications'",
+    "dist": "electron-vite build && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.raphael.noted",
+    "productName": "Noted",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "!node_modules/onnxruntime-web/**/*",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/**"
+    ],
+    "asarUnpack": [
+      "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
+      "out/main/embed-worker.cjs",
+      "out/main/layout-worker.cjs",
+      "node_modules/@huggingface/**/*",
+      "node_modules/onnxruntime-node/**/*",
+      "node_modules/onnxruntime-common/**/*",
+      "node_modules/sharp/**/*",
+      "node_modules/@img/**/*",
+      "node_modules/detect-libc/**/*",
+      "node_modules/semver/**/*"
+    ],
+    "npmRebuild": false,
+    "mac": {
+      "category": "public.app-category.education",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "darkModeSupport": true,
+      "icon": "build/icon.icns",
+      "identity": "Noted Local",
+      "extendInfo": {
+        "NSDocumentsFolderUsageDescription": "Noted range tes cours, tes notes et la memoire de l'IA dans le dossier Documents/Noted."
+      }
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.231",
+    "@huggingface/transformers": "^4.2.0",
+    "gray-matter": "^4.0.3",
+    "mammoth": "^1.12.1",
+    "sharp": "^0.34.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@tiptap/extension-highlight": "^3.30.1",
+    "@tiptap/extension-link": "^3.30.1",
+    "@tiptap/extension-mathematics": "^3.30.1",
+    "@tiptap/extension-placeholder": "^3.30.1",
+    "@tiptap/extension-table": "^3.30.1",
+    "@tiptap/extension-text-align": "^3.30.1",
+    "@tiptap/extension-text-style": "^3.30.1",
+    "@tiptap/react": "^3.30.1",
+    "@tiptap/starter-kit": "^3.30.1",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/turndown": "^5.0.5",
+    "@vitejs/plugin-react": "^5.2.0",
+    "clsx": "^2.1.1",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "framer-motion": "^13.1.0",
+    "katex": "^0.18.4",
+    "lucide-react": "^1.31.0",
+    "marked": "^18.0.9",
+    "mermaid": "^11.16.1",
+    "pdfjs-dist": "^6.2.108",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.6"
+  }
+}

@@ -1,0 +1,1537 @@
+/* --- Taille de lecture du fil ---------------------------------------------
+   Un volet lateral de 380 px et un plein ecran de 1400 px ne se lisent pas a
+   la meme distance : on recule du second, on se penche sur le premier. D'ou
+   une seule variable, dont tout le fil depend — messages, question, barre de
+   saisie —, et qui monte d'un cran en mode concentration. */
+.panel--chat {
+  --chat-text: 13.5px;
+}
+
+.workspace[data-focus='chat'] > .panel--chat {
+  --chat-text: 15.5px;
+}
+
+.chat-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-4) var(--space-5);
+  /* Le repere des pastilles de citation, qui se posent en absolu dedans et
+     defilent donc avec le fil, sans une ligne de code pour les suivre. */
+  position: relative;
+}
+
+/* Plein ecran : la colonne cesse de s'etirer. Une ligne de mille pixels se
+   lit mal — l'oeil perd le debut de la suivante — et la barre de saisie
+   devenue un ruban d'un bord a l'autre n'a plus l'air d'un endroit ou l'on
+   ecrit une phrase. La mesure vaut pour le fil comme pour la barre, sans quoi
+   les deux ne seraient plus alignes. */
+.workspace[data-focus='chat'] .chat-body,
+.workspace[data-focus='chat'] .composer-quotes,
+.workspace[data-focus='chat'] .composer-field,
+.workspace[data-focus='chat'] .composer-actions {
+  width: 100%;
+  max-width: 780px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* --- Accueil du fil -------------------------------------------------------- */
+
+.chat-intro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
+.chat-intro-title {
+  margin: 0;
+  font-family: var(--font-read);
+  font-size: var(--text-md);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.chat-intro-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-ghost);
+}
+
+.chat-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.chat-suggestion {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+  transition:
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+.chat-suggestion:hover {
+  border-color: var(--brass-line);
+  background: var(--brass-wash);
+  color: var(--text-dim);
+}
+
+/* --- Messages -------------------------------------------------------------- */
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* La question est un bloc compact, decale : on la distingue d'un coup d'oeil
+   en parcourant le fil, sans avoir besoin d'etiquette « vous ».
+
+   Ni cadre ni angle vif : un aplat de sable pose sur l'ivoire du fil, arrondi
+   franc, et le coin bas-droit rentre — c'est de ce cote qu'on ecrit, la bulle
+   pointe vers sa barre de saisie. L'ombre est double et courte : un pixel de
+   contact qui la decolle du fond, puis une nappe basse qui lui donne son
+   epaisseur. La reponse, elle, reste du texte nu : c'est ce que font Claude et
+   ChatGPT, et un tableau de comps n'a que faire d'un cadre autour. */
+.message--user {
+  align-self: flex-end;
+  max-width: 82%;
+  background: var(--chat-bubble);
+  border-radius: 18px 18px 6px 18px;
+  padding: 10px 15px;
+  box-shadow:
+    0 1px 2px rgba(74, 58, 33, 0.07),
+    0 5px 14px -6px rgba(74, 58, 33, 0.14);
+}
+
+.message--user .message-text {
+  font-size: var(--chat-text);
+  line-height: 1.5;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.message--assistant {
+  font-size: var(--chat-text);
+  line-height: 1.66;
+  color: var(--text);
+}
+
+.message-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.message-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.message-markdown p {
+  margin: 0 0 0.7em;
+}
+
+/* En em, pas en pixels : un titre fige a 12,5 px devenait plus petit que le
+   corps des que celui-ci grandissait. */
+.message-markdown h1,
+.message-markdown h2,
+.message-markdown h3 {
+  font-size: 1em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  margin: 1.1em 0 0.4em;
+}
+
+.message-markdown ul,
+.message-markdown ol {
+  margin: 0 0 0.7em;
+  padding-left: 1.25em;
+}
+
+.message-markdown li {
+  margin-bottom: 0.25em;
+}
+
+.message-markdown li::marker {
+  color: var(--text-ghost);
+}
+
+/* `box-decoration-break: clone` : un extrait de code qui n'entre pas sur la
+   ligne se coupe en deux morceaux, et par defaut le navigateur ne dessine
+   qu'un seul cadre a cheval sur les deux — ouvert a droite du premier, ouvert
+   a gauche du second, rembourre nulle part. Avec `clone`, chaque morceau
+   recoit son cadre entier : deux pastilles au lieu d'une pastille dechiree.
+   Le fond passe de --paper-raised, devenu celui du panneau, a --paper : sans
+   quoi la pastille n'aurait plus rien a detacher. */
+.message-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.87em;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.message-markdown pre {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  overflow-x: auto;
+  margin: 0 0 0.7em;
+  box-shadow: 0 1px 2px rgba(74, 58, 33, 0.05);
+}
+
+.message-markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+}
+
+.message-markdown blockquote {
+  margin: 0 0 0.7em;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--rule-strong);
+  color: var(--text-dim);
+}
+
+.message-markdown strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Meme regime que les tableaux d'une note : des filets horizontaux d'un cheveu,
+   rien d'autre — la gouttiere blanche separe les colonnes mieux qu'un
+   quadrillage. Un tableau de reponse depasse souvent la largeur du panneau :
+   `display: block` en fait son propre conteneur de defilement, sans avoir a
+   l'envelopper dans le HTML rendu. */
+.message-markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border-collapse: collapse;
+  font-size: 0.94em;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 0.9em;
+}
+
+.message-markdown th,
+.message-markdown td {
+  border-bottom: 1px solid var(--rule);
+  padding: 5px 16px 5px 0;
+  vertical-align: top;
+  /* `start`, jamais `left` : l'alignement demande par le Markdown arrive en
+     attribut de presentation, de specificite nulle, et `left` l'annulerait. */
+  text-align: start;
+}
+
+.message-markdown th[align='center'],
+.message-markdown td[align='center'] {
+  text-align: center;
+}
+
+.message-markdown th[align='right'],
+.message-markdown td[align='right'] {
+  text-align: right;
+}
+
+.message-markdown th:last-child,
+.message-markdown td:last-child {
+  padding-right: 0;
+}
+
+.message-markdown thead th {
+  border-bottom-color: var(--rule-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.message-markdown tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* --- Citations de page -----------------------------------------------------
+   Le lien entre la reponse et le document : cliquer ramene a la page citee. */
+
+.citation {
+  display: inline;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--brass-strong);
+  background: var(--brass-wash);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+  /* Meme raison que pour le code en ligne : « pp. 93-94 » ne doit pas se
+     retrouver a moitie hors de son lavis quand il tombe en fin de ligne. */
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background-color var(--fast) var(--ease);
+}
+
+.citation:hover {
+  background: var(--brass-line);
+  color: var(--brass-strong);
+}
+
+/* --- Traces d'outils --------------------------------------------------------
+   Discretes : signaler que Claude a consulte un autre fichier, sans encombrer. */
+
+/* --- Etapes intermediaires -------------------------------------------------- */
+
+/* Un filet vertical relie les etapes entre elles : on lit d'un coup d'oeil ce
+   qui a precede la reponse, sans que cela concurrence la reponse elle-meme. */
+.step {
+  border-left: 1px solid var(--rule-strong);
+  padding-left: var(--space-2);
+}
+
+.step + .step {
+  margin-top: 2px;
+}
+
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-ghost);
+  text-align: left;
+  transition: color var(--fast) var(--ease);
+}
+
+.step-head[data-expandable='true'] {
+  cursor: pointer;
+}
+
+.step-head[data-expandable='true']:hover {
+  color: var(--text-dim);
+}
+
+.step-marker {
+  flex: none;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--rule-strong);
+  transition: background-color var(--fast) var(--ease);
+}
+
+.step-head:hover .step-marker {
+  background: var(--brass);
+}
+
+/* Une etape en cours respire, pour distinguer ce qui tourne de ce qui est fait. */
+.step-marker[data-running='true'] {
+  background: var(--brass);
+  animation: step-pulse 1.4s var(--ease) infinite;
+}
+
+@keyframes step-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.5);
+  }
+}
+
+.step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-caret {
+  flex: none;
+  margin-left: auto;
+  padding-left: var(--space-2);
+  font-size: 11px;
+  line-height: 1;
+  transition: transform var(--fast) var(--ease);
+}
+
+.step[data-open='true'] .step-caret {
+  transform: rotate(90deg);
+}
+
+.step-body {
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding: var(--space-2);
+  /* Un cran sous le panneau, qui est desormais --paper-raised : le detail
+     d'une etape doit se lire comme un tiroir ouvert dans le fil. */
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  animation: step-open 140ms var(--ease);
+}
+
+@keyframes step-open {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+.step-section + .step-section {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--rule);
+}
+
+.step-section-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.step-section-body {
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* --- Traces de memoire -------------------------------------------------------
+   Meme allure que les etapes, plus le bouton d'annulation : l'ecriture est
+   automatique, le garde-fou est la — visible, et reversible d'un clic. */
+
+.memory-trace .step-marker {
+  background: var(--brass);
+}
+
+.memory-trace-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.memory-trace-head .step-head {
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-trace-cancel {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-ghost);
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.memory-trace-cancel:hover {
+  color: var(--text);
+  border-color: var(--rule-strong);
+}
+
+/* Un geste annule reste lisible — barre, eteint — plutot que disparu : voir
+   qu'une ecriture a ete refusee fait partie de la trace. */
+.memory-trace[data-cancelled='true'] .step-label {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.memory-trace[data-cancelled='true'] .step-marker {
+  background: var(--rule-strong);
+}
+
+/* --- Attente ---------------------------------------------------------------- */
+
+.thinking {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: var(--text-sm);
+}
+
+.thinking-glyph {
+  color: var(--brass);
+  font-size: 11px;
+  animation: thinking-turn 2.4s linear infinite;
+  display: inline-block;
+}
+
+@keyframes thinking-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Un reflet de laiton parcourt le mot, de gauche a droite, sans interruption.
+   C'est le seul mouvement de l'ecran pendant l'attente : il suffit a dire que
+   quelque chose travaille. */
+.thinking-label {
+  background: linear-gradient(
+    100deg,
+    var(--text-faint) 30%,
+    var(--brass-strong) 50%,
+    var(--text-faint) 70%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thinking-shimmer 2.1s var(--ease) infinite;
+}
+
+@keyframes thinking-shimmer {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+
+.thinking-meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-ghost);
+}
+
+/* Une animation permanente devient une gene pour qui y est sensible. */
+@media (prefers-reduced-motion: reduce) {
+  .thinking-glyph,
+  .thinking-label,
+  .step-marker[data-running='true'] {
+    animation: none;
+  }
+
+  .thinking-label {
+    color: var(--text-faint);
+    background: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+  }
+}
+
+/* --- Messages d'etat -------------------------------------------------------- */
+
+.chat-notice {
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--rule-strong);
+  color: var(--text-faint);
+}
+
+.chat-notice[data-tone='error'] {
+  border-color: rgba(192, 57, 43, 0.36);
+  background: rgba(192, 57, 43, 0.07);
+  color: #9d2c1f;
+}
+
+.message-error {
+  font-size: var(--text-sm);
+  color: #9d2c1f;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--hl-incompris);
+}
+
+/* --- Repere de compaction ---------------------------------------------- */
+
+/* Une ligne, pas une bulle : la compaction n'est pas un tour de conversation,
+   juste un moment du fil qui merite d'etre repere. */
+.message--system {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  align-self: stretch;
+  margin: calc(-1 * var(--space-2)) 0;
+}
+
+.message-system-line {
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+.message-system-text {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+  white-space: nowrap;
+}
+
+.message--system[data-tone='error'] .message-system-text {
+  color: #9d2c1f;
+}
+
+/* --- Sous une reponse terminee ---------------------------------------------- */
+
+.message-actions {
+  margin-top: var(--space-1);
+}
+
+/* Discret comme une etape : present quand on le cherche, muet sinon. */
+.message-action {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.message-action:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--brass-strong);
+}
+
+.message-action:disabled {
+  color: var(--brass-strong);
+  cursor: default;
+}
+
+/* --- Zone de saisie ---------------------------------------------------------- */
+
+.composer {
+  flex: none;
+  border-top: 1px solid var(--rule);
+  padding: var(--space-3);
+  background: var(--paper);
+}
+
+/* La pilule est portee par ce conteneur, pas par le champ lui-meme : le rond
+   d'envoi est alors un element de la rangee, aligne par le flex. Pose en
+   absolu contre le bord droit, il mordait sur la courbe — le cote d'une
+   pilule est un demi-cercle, il rentre vers l'interieur a mesure qu'on
+   s'eloigne du milieu. */
+.composer-field {
+  display: flex;
+  /* En bas, pas au centre. Sur une question de cinq lignes, une fleche
+     centree flotte au milieu du paragraphe ; calee en bas, elle reste ou la
+     main la cherche, a cote du dernier mot tape. C'est le geste de Claude et
+     de ChatGPT. */
+  align-items: flex-end;
+  gap: var(--space-2);
+  /* Le rond d'envoi (28 px) est plus haut qu'une ligne de texte : c'est lui
+     qui fixe la hauteur au repos, 12 + 28 + 12 = 52 px, quelle que soit la
+     taille de lecture. A gauche, un peu plus de marge : du texte est
+     optiquement plus leger qu'un disque plein. Cliquer sur ces marges ramene
+     au champ (`focusField`), sans quoi elles seraient des bandes mortes. */
+  padding: 12px 12px 12px 18px;
+  box-shadow: var(--shadow-panel);
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule-strong);
+  /* 26 px, soit exactement la moitie des 52 px du repos : au repos la barre
+     est donc une pilule pleine — la forme dit « on ecrit une phrase ici », la
+     ou un rectangle annonce un formulaire —, et des qu'elle grandit elle
+     devient un rectangle a coins francs au lieu de continuer a bomber. Un
+     rayon de 999 px la transformait en lozenge des la troisieme ligne : les
+     joues rondes mangeaient le texte et la fleche semblait posee dehors. */
+  border-radius: 26px;
+  cursor: text;
+  transition:
+    border-color var(--fast) var(--ease),
+    box-shadow var(--normal) var(--ease);
+}
+
+.composer-field:focus-within {
+  border-color: var(--brass-line);
+  /* L'ombre se creuse quand la barre prend la main : elle avance d'un cran
+     vers le lecteur, comme dans le composant d'origine. */
+  box-shadow: var(--shadow-pop);
+  /* Le gonflement qui marque le clic. Pose sur un selecteur d'etat, il rejoue
+     a chaque fois qu'on revient dans la barre, sans une ligne de JavaScript. */
+  animation: composer-field-pulse 240ms var(--ease);
+}
+
+@keyframes composer-field-pulse {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.015);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Le champ grise toute la pilule, pas seulement son texte. */
+.composer-field:has(.composer-input:disabled) {
+  opacity: 0.5;
+}
+
+.composer-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  resize: none;
+  max-height: 196px;
+  /* La zone grandit avec le texte sans jamais devenir un pave. */
+  field-sizing: content;
+  font-size: var(--chat-text);
+  line-height: 1.55;
+  color: var(--text);
+  /* Le fond, le cadre et le rembourrage sont ceux de la pilule, au-dessus. */
+  background: none;
+  border: none;
+  /* Sauf ce coussin-la, qui rattrape un decalage de la rangee. Le rond
+     d'envoi (28px) est plus haut qu'une ligne de texte, et c'est donc lui qui
+     fixe la hauteur ; cale en bas par `align-items: flex-end`, le texte
+     tombait 3,5px sous le milieu de la pilule — assez pour se voir sur une
+     barre vide, ou la phrase est seule a regarder. La moitie de l'ecart,
+     posee sous le texte, le remonte sur l'axe sans toucher au repos de 52px
+     ni deranger la fleche, qui reste ou la main la cherche. `1lh` suit la
+     taille de lecture, qui se regle. */
+  padding: 0 0 max(0px, calc((28px - 1lh) / 2));
+  user-select: text;
+  cursor: text;
+}
+
+/* Le focus par defaut (global.css) ne pose pas qu'un contour : il reecrit
+   aussi `border-radius`. Sans ce garde-fou, la pilule redevenait un rectangle
+   a 4 px des le premier clic. */
+.composer-input:focus,
+.composer-input:focus-visible {
+  outline: none;
+  border-radius: 0;
+}
+
+.composer-input::placeholder {
+  color: var(--text-ghost);
+}
+
+.composer-input:disabled {
+  cursor: default;
+}
+
+/* Le rond d'envoi : un element de la rangee, centre par le flex sur la
+   hauteur — donc toujours au milieu de la courbe, quelle que soit la hauteur
+   de la barre. */
+.composer-round-send {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--on-brass);
+  background: var(--brass-strong);
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+  transition:
+    opacity var(--fast) var(--ease),
+    transform var(--fast) var(--ease),
+    background-color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+/* N'apparait que si la barre porte deja du texte, ou pendant la reponse — le
+   reste du temps, rien a envoyer ni a arreter. */
+.composer-round-send[data-visible='true'] {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.composer-round-send:hover:not(:disabled) {
+  background: var(--brass-deep);
+}
+
+.composer-round-send:disabled {
+  cursor: default;
+}
+
+.composer-round-send[data-tone='stop'] {
+  background: none;
+  border: 1px solid var(--rule-strong);
+  color: var(--text-faint);
+}
+
+.composer-round-send[data-tone='stop']:hover {
+  border-color: var(--hl-incompris);
+  color: var(--hl-incompris);
+}
+
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.composer-hint {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+  white-space: nowrap;
+}
+
+/* --- Choix du modele et du niveau de reflexion --------------------------- */
+
+.composer-settings {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* Seul groupe de la ligne qui doit ceder de la place : le bouton d'envoi
+     doit lui rester lisible et cliquable en toutes circonstances. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.composer-picker {
+  position: relative;
+  /* Sans cela, un flex-item ne descend jamais sous la largeur de son contenu :
+     c'est ce qui faisait deborder l'etiquette du modele ou de la reflexion
+     par-dessus le bouton d'envoi dans un panneau etroit. */
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.composer-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 7px;
+  min-width: 0;
+  /* Une puce trop ecrasee devient un bouton fantome ; en dessous de cette
+     largeur, la barre du chat n'a de toute facon plus de sens. */
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  transition:
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+/* Le libelle seul se tronque : la fleche reste entiere, elle dit qu'il y a un
+   menu a ouvrir meme quand le nom du modele ou du niveau ne tient plus. */
+.composer-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 14px;
+}
+
+.composer-chip:hover:not(:disabled),
+.composer-chip[data-active='true'] {
+  color: var(--text);
+  background: var(--hover);
+  border-color: var(--rule);
+}
+
+.composer-chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.composer-chip-caret {
+  flex: none;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-ghost);
+}
+
+/* Le composeur est colle au bas du panneau : le menu s'ouvre vers le haut. */
+.composer-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 268px;
+  padding: var(--space-1);
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  animation: composer-menu-in 120ms var(--ease);
+}
+
+@keyframes composer-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.composer-menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.composer-menu-item:hover {
+  background: var(--hover);
+}
+
+.composer-menu-label {
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+.composer-menu-item:hover .composer-menu-label {
+  color: var(--text);
+}
+
+/* Le choix courant se signale par la couleur d'accent, pas par une coche :
+   la liste reste alignee et le regard trouve la ligne active d'un coup. */
+.composer-menu-item[data-selected='true'] .composer-menu-label {
+  color: var(--brass-strong);
+  font-weight: 600;
+}
+
+.composer-menu-description {
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--text-ghost);
+}
+
+/* --- Historique des conversations ---------------------------------------- */
+
+.history-picker {
+  position: relative;
+}
+
+/* Contrairement au menu du composeur, colle en bas, celui-ci part de
+   l'entete : il s'ouvre donc vers le bas. */
+.history-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  animation: composer-menu-in 120ms var(--ease);
+}
+
+.history-empty {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-ghost);
+}
+
+.history-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.history-item:hover {
+  background: var(--hover);
+}
+
+.history-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+
+.history-item:hover .history-item-title {
+  color: var(--text);
+}
+
+.history-item[data-active='true'] .history-item-title {
+  color: var(--brass-strong);
+  font-weight: 600;
+}
+
+.history-item-date {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+}
+
+
+
+/* --- Repondre a des passages precis ----------------------------------------
+   Selectionner dans une reponse, cliquer « Citer » : le passage rejoint la
+   barre de saisie, numerote, et reste marque dans la reponse jusqu'a l'envoi.
+   On en prend plusieurs — c'est tout l'interet : repondre point par point
+   plutot que de recopier a la main ce dont on veut parler. */
+
+/* Le passage retenu, peint par le registre du navigateur comme les
+   surlignages du cours. Un lavis de laiton plutot qu'une des cinq couleurs de
+   la palette : ce marquage-ci ne dure que le temps d'ecrire la question, il ne
+   doit pas se lire comme une annotation posee sur un document. */
+::highlight(noted-chat-quote) {
+  background-color: var(--brass-wash);
+}
+
+.quote-marks {
+  position: absolute;
+  inset: 0;
+  /* Un calque de reperes ne prend pas la souris : la selection continue de se
+     faire au travers. */
+  pointer-events: none;
+}
+
+/* La pastille se pose juste avant le passage, centree sur sa premiere ligne.
+   Elle mord sur la marge du fil, jamais sur le texte — il y a la exactement la
+   place qu'il faut. */
+.quote-mark {
+  position: absolute;
+  transform: translate(calc(-100% - 3px), -50%);
+}
+
+/* Le meme jeton rond partout : sur le passage, sur la citation en attente, et
+   sur celle que la question garde une fois envoyee. C'est lui qui fait le lien
+   entre les trois endroits — un numero ne vaut que s'il se reconnait. */
+.quote-mark,
+.composer-quote-n,
+.message-quote-n {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--brass-strong);
+  color: var(--on-brass);
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  /* Le chiffre est optiquement centre : sans cela il flotte d'un demi-pixel
+     vers le bas dans un si petit disque. */
+  line-height: 1;
+}
+
+/* Le bouton qui sort sur une selection, au-dessus d'elle : la ou l'oeil est
+   deja, plutot que dans une barre d'outils qu'il faudrait aller chercher.
+   Meme geste que la palette de surlignage du cours. */
+.quote-pop {
+  position: fixed;
+  z-index: 40;
+  /* Centre sur la selection, pose au-dessus : les coordonnees peuvent alors
+     rester celles du passage, sans mesurer le bouton. */
+  transform: translate(-50%, calc(-100% - 10px));
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 11px 0 9px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: var(--paper-overlay);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+  animation: quote-pop-in 120ms var(--ease);
+  transition:
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+@keyframes quote-pop-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 4px));
+  }
+}
+
+.quote-pop:hover {
+  color: var(--brass-strong);
+  border-color: var(--brass-line);
+}
+
+.quote-pop-glyph {
+  font-size: 13px;
+  line-height: 1;
+  color: var(--brass);
+}
+
+/* Les passages retenus, empiles au-dessus de la barre — dans l'ordre ou ils
+   ont ete pris, qui est celui de leurs numeros. */
+.composer-quotes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: var(--space-2);
+}
+
+.composer-quote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px 6px 9px;
+  /* Le filet a gauche, comme une citation dans un texte : la forme dit ce que
+     c'est avant qu'on ait lu le contenu. */
+  border-left: 2px solid var(--brass-line);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--brass-wash);
+  animation: quote-in 140ms var(--ease);
+}
+
+@keyframes quote-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+.composer-quote-text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text-dim);
+  /* Deux lignes suffisent a reconnaitre le passage ; le modele, lui, le recoit
+     entier. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* La provenance, quand le passage ne vient pas du fil : « mes notes, p. 12 ».
+   Elle se lit d'un coup d'oeil sans disputer sa place au passage lui-meme —
+   petite, en petites capitales, et jamais coupee : c'est elle qui distingue
+   deux puces dont le texte se ressemble. Meme jeton dans la barre de saisie et
+   dans la question envoyee, comme les pastilles numerotees. */
+.quote-source {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--brass-line);
+  color: var(--text-dim);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.message-quote .quote-source {
+  color: var(--text-faint);
+}
+
+.composer-quote-drop {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 10px;
+  color: var(--text-ghost);
+  transition:
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+.composer-quote-drop:hover {
+  color: var(--text);
+  background: var(--paper-deep);
+}
+
+/* Ce que la question citait, garde dans sa bulle. Relue trois jours plus tard,
+   « developpe les deux » ne veut plus rien dire sans ces deux lignes. Le texte
+   y est plus pale que la question : c'est un rappel, pas le propos. */
+.message-quotes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.message-quote {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-left: 8px;
+  border-left: 2px solid var(--brass-line);
+}
+
+.message-quote-text {
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--text-faint);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* --- La carte de quiz -------------------------------------------------------
+   Le fil est une page de papier creme ; le quiz est la feuille d'examen qu'on
+   pose dessus. D'ou le seul blanc franc de tout l'espace de travail — c'est ce
+   contraste, et non un cadre, qui en fait un objet detache et designe l'endroit
+   ou l'on doit agir.
+
+   L'ombre est batie en quatre couches : un liseré chaud qui dessine l'arete, un
+   pixel de contact qui decolle la feuille du fond, une nappe courte qui lui
+   donne son epaisseur, et une nappe large et basse qui la fait flotter. Le tout
+   en brun plutot qu'en noir — une ombre grise salirait le creme. Une arete
+   blanche interieure en haut accroche la lumiere, comme sur une vraie feuille
+   dont le bord superieur se releve a peine. */
+
+.quiz-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: var(--space-2) 0;
+  padding: 18px 20px 20px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 1px rgba(74, 58, 33, 0.07),
+    0 1px 2px rgba(74, 58, 33, 0.06),
+    0 6px 16px -8px rgba(74, 58, 33, 0.18),
+    0 22px 44px -20px rgba(74, 58, 33, 0.24);
+}
+
+/* La copie rendue : la feuille se pose, l'ombre se raccourcit. Il n'y a plus
+   rien a y faire — elle cesse d'appeler le regard sans pour autant disparaitre,
+   puisque c'est en regard d'elle qu'on lit la correction. */
+.quiz-card[data-locked] {
+  box-shadow:
+    0 0 0 1px rgba(74, 58, 33, 0.07),
+    0 1px 2px rgba(74, 58, 33, 0.05),
+    0 6px 14px -10px rgba(74, 58, 33, 0.16);
+}
+
+.quiz-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.quiz-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.quiz-kicker {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 640;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--brass-strong);
+}
+
+.quiz-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+/* Le compteur est une donnee, pas un titre : chiffres a chasse fixe, pour que
+   « 3 / 5 » ne fasse pas sauter la ligne en passant a « 4 / 5 ». */
+.quiz-count {
+  flex: none;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-ghost);
+}
+
+.quiz-card[data-locked] .quiz-count {
+  color: var(--brass-strong);
+}
+
+.quiz-gauge {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(74, 58, 33, 0.08);
+  overflow: hidden;
+}
+
+.quiz-gauge span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brass);
+  transition: width var(--normal) var(--ease);
+}
+
+.quiz-questions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quiz-question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* L'enonce et son numero : le numero dans la marge, l'enonce aligne sur sa
+   premiere ligne. Les enonces se comptent du regard sans lire. */
+.quiz-stem {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.quiz-n {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--brass-wash);
+  font-size: 11px;
+  font-weight: 660;
+  font-variant-numeric: tabular-nums;
+  color: var(--brass-strong);
+}
+
+.quiz-stem-text {
+  margin: 0;
+  font-size: var(--chat-text);
+  font-weight: 540;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.quiz-hint {
+  margin: -2px 0 0 30px;
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+}
+
+.quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 30px;
+}
+
+/* Une option est une cible, donc large : toute la ligne se clique, pas
+   seulement la lettre. Au repos elle est a peine posee sur le blanc — un filet
+   et rien d'autre ; cochee, elle prend l'aplat de laiton, la seule couleur
+   franche de la carte. */
+.quiz-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 11px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  text-align: left;
+  font-size: var(--chat-text);
+  line-height: 1.45;
+  color: var(--text-dim);
+  transition:
+    border-color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.quiz-option:hover:not(:disabled) {
+  border-color: var(--rule-strong);
+  background: rgba(74, 58, 33, 0.025);
+}
+
+.quiz-option[data-chosen] {
+  border-color: var(--brass-line);
+  background: var(--brass-wash);
+  color: var(--text);
+}
+
+.quiz-option:disabled {
+  cursor: default;
+}
+
+/* Une option non cochee sur une copie rendue s'efface : ce qu'on a repondu doit
+   se lire d'un coup d'oeil quand la correction arrive juste en dessous. */
+.quiz-card[data-locked] .quiz-option:not([data-chosen]) {
+  border-color: transparent;
+  color: var(--text-ghost);
+}
+
+.quiz-letter {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+  background: rgba(74, 58, 33, 0.07);
+  font-size: 11px;
+  font-weight: 640;
+  color: var(--text-faint);
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.quiz-option[data-chosen] .quiz-letter {
+  background: var(--brass-strong);
+  color: var(--on-brass);
+}
+
+.quiz-option-text {
+  min-width: 0;
+}
+
+.quiz-field {
+  resize: none;
+  margin-left: 30px;
+  padding: 9px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  font-size: var(--chat-text);
+  line-height: 1.5;
+  color: var(--text);
+  transition:
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+
+.quiz-field::placeholder {
+  color: var(--text-ghost);
+}
+
+.quiz-field:focus {
+  border-color: var(--brass-line);
+  box-shadow: 0 0 0 3px var(--brass-wash);
+}
+
+/* La reponse rendue : plus un champ, un texte — mais garde le retrait du champ
+   qu'il remplace, pour que la carte ne bouge pas en se verrouillant. */
+.quiz-written {
+  margin: 0 0 0 30px;
+  padding: 9px 12px;
+  border-left: 2px solid var(--brass-line);
+  font-size: var(--chat-text);
+  line-height: 1.55;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+
+.quiz-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.quiz-send {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: var(--text-sm);
+  font-weight: 580;
+  color: var(--on-brass);
+  background: var(--brass-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(74, 58, 33, 0.2),
+    0 4px 10px -4px rgba(74, 58, 33, 0.34);
+  transition:
+    background-color var(--fast) var(--ease),
+    transform var(--fast) var(--ease);
+}
+
+.quiz-send:hover:not(:disabled) {
+  background: var(--brass-deep);
+}
+
+.quiz-send:active:not(:disabled) {
+  transform: scale(0.975);
+}
+
+.quiz-send:disabled {
+  opacity: 0.45;
+  transform: none;
+  cursor: default;
+}
+
+.quiz-skip {
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: var(--text-sm);
+  color: var(--text-ghost);
+  transition:
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+.quiz-skip:hover {
+  background: rgba(74, 58, 33, 0.05);
+  color: var(--text-dim);
+}
+
+/* La carte dont plus personne n'attend la copie. Un avertissement, pas une
+   alarme : l'envoi marche toujours, il passe seulement par un autre chemin. */
+.quiz-orphan {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(74, 58, 33, 0.045);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--text-faint);
+}

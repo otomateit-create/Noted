@@ -1,0 +1,255 @@
+/*
+ * L'ecran Parametres : une carte par agent, avec son prompt en clair.
+ *
+ * Le champ est en fonte a chasse fixe, comme un fichier de configuration : ce
+ * qu'on ecrit la part mot pour mot au modele, et l'alignement des listes et
+ * des blocs de code doit se voir a l'ecran comme il se verra la-bas.
+ */
+
+.prompt-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+}
+
+.prompt-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.prompt-name {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 620;
+  letter-spacing: -0.014em;
+  color: var(--shell-text);
+}
+
+/* Les deux etats qu'une carte peut porter : un texte regle, une frappe en
+   attente. Le second est le plus urgent des deux, d'ou le laiton. */
+.prompt-badge {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  color: var(--shell-text-dim);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.prompt-badge-dirty {
+  color: #8a6510;
+  background: rgba(190, 140, 30, 0.14);
+}
+
+.prompt-description {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  max-width: 62ch;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--shell-text-mid);
+}
+
+.prompt-editor {
+  width: 100%;
+  min-height: 300px;
+  max-height: 60vh;
+  padding: var(--space-3);
+  border: 1px solid var(--shell-line-strong);
+  border-radius: var(--radius);
+  background: #fcfcfd;
+  color: var(--shell-text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  tab-size: 2;
+  resize: vertical;
+  transition: border-color var(--fast) var(--swift), box-shadow var(--fast) var(--swift);
+}
+
+.prompt-editor:focus {
+  outline: none;
+  border-color: rgba(74, 58, 33, 0.35);
+  box-shadow: 0 0 0 3px rgba(74, 58, 33, 0.08);
+}
+
+/* --- Ce que l'application ajoute -------------------------------------------
+   Replie par defaut : c'est une precision, pas une consigne a lire chaque
+   fois. Deplie, il dit exactement ce qu'aucun reglage ne remplace. */
+
+.prompt-annexe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.prompt-annexe-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  font-size: var(--text-sm);
+  color: var(--shell-text-dim);
+  transition: color var(--fast) var(--swift);
+}
+
+.prompt-annexe-toggle:hover {
+  color: var(--shell-text);
+}
+
+.prompt-annexe-chevron {
+  display: inline-block;
+  font-size: 13px;
+  transition: transform var(--fast) var(--swift);
+}
+
+.prompt-annexe-chevron[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+.prompt-annexe-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-left: 2px solid var(--shell-line-strong);
+  background: rgba(0, 0, 0, 0.018);
+}
+
+.prompt-annexe-lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--shell-text-mid);
+}
+
+.prompt-annexe-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prompt-annexe-titre {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--shell-text-ghost);
+}
+
+/* Le bloc reel, pas une paraphrase : meme fonte que le champ au-dessus, pour
+   qu'on lise d'un coup le prompt et ce qui vient s'y coller. Il defile seul —
+   un plan de document depasse vite la hauteur d'une carte. */
+.prompt-annexe-texte {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--shell-text-mid);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* L'explication des reperes ne s'affiche que s'il en reste dans le champ. */
+.prompt-markers {
+  margin: calc(-1 * var(--space-1)) 0 0;
+  max-width: 62ch;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--shell-text-dim);
+}
+
+/* --- Les actions ---------------------------------------------------------- */
+
+.prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Le fichier qui porte le prompt, cliquable : il s'ouvre dans le Finder. Le
+   dire ici plutot que dans un texte d'aide — c'est en bas de la carte, la ou
+   l'on se demande « et ca s'ecrit ou, tout ca ? ». */
+.prompt-file {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--shell-text-ghost);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color var(--fast) var(--swift), text-decoration-color var(--fast) var(--swift);
+}
+
+.prompt-file:hover {
+  color: var(--shell-text-mid);
+  text-decoration-color: currentColor;
+}
+
+.prompt-count {
+  flex: 1;
+  text-align: right;
+  font-size: var(--text-xs);
+  color: var(--shell-text-ghost);
+  font-variant-numeric: tabular-nums;
+}
+
+.prompt-restore,
+.prompt-save {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 520;
+  transition:
+    background-color var(--fast) var(--swift),
+    color var(--fast) var(--swift),
+    opacity var(--fast) var(--swift);
+}
+
+.prompt-restore {
+  color: var(--shell-text-mid);
+  border: 1px solid var(--shell-line-strong);
+}
+
+.prompt-restore:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--shell-text);
+}
+
+.prompt-save {
+  color: #fff;
+  background: #26282f;
+}
+
+.prompt-save:hover:not(:disabled) {
+  background: #3a3d46;
+}
+
+.prompt-save[data-state='saved'] {
+  background: #2f6d46;
+}
+
+.prompt-save[data-state='error'] {
+  background: var(--shell-danger);
+}
+
+.prompt-restore:disabled,
+.prompt-save:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

@@ -1,0 +1,1593 @@
+/* --- Barre d'outils ------------------------------------------------------- */
+
+/*
+ * La barre passe a la ligne plutot que de defiler lateralement.
+ *
+ * Elle defilait auparavant en `overflow-x: auto`, ce qui avait une consequence
+ * qu'on ne voyait pas venir : des qu'un axe cesse d'etre « visible », l'autre
+ * cesse de l'etre aussi, et la barre se mettait a rogner ce qui depasse en
+ * hauteur. Les menus de couleur et de surlignage s'ouvrent justement en
+ * dessous — ils s'affichaient bien, mais coupes hors du cadre. Les boutons
+ * semblaient alors sans effet. En repliant sur une deuxieme ligne, rien n'est
+ * jamais hors d'atteinte et les menus retrouvent leur place.
+ */
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  flex: none;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--rule);
+}
+
+.tool-group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding-right: var(--space-2);
+  margin-right: var(--space-1);
+  border-right: 1px solid var(--rule-strong);
+}
+
+.tool-group:last-child {
+  border-right: none;
+}
+
+.tool-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+  white-space: nowrap;
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.tool-button:hover {
+  background: var(--hover);
+  color: var(--text-dim);
+}
+
+.tool-button[data-active='true'] {
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+.tool-button sub {
+  font-size: 8px;
+  line-height: 1;
+}
+
+.tool-colour-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* --- Taille du texte, a la maniere de Word --------------------------------- */
+
+.tool-stepper {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.tool-stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: var(--text-md);
+  line-height: 1;
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.tool-stepper-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text-dim);
+}
+
+.tool-stepper-btn:disabled {
+  color: var(--text-ghost);
+  cursor: default;
+}
+
+.tool-stepper-value {
+  min-width: 18px;
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Menus deroulants ------------------------------------------------------ */
+
+.tool-menu {
+  position: relative;
+}
+
+.tool-popover {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 40;
+  min-width: 156px;
+  padding: var(--space-1);
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  animation: popover-in 120ms var(--ease);
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+.tool-popover-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 5px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+  text-align: left;
+}
+
+.tool-popover-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tool-popover-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: none;
+  border: 1px solid rgba(43, 38, 32, 0.16);
+}
+
+.tool-popover-swatch--none {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--rule-strong),
+    var(--rule-strong) 3px,
+    var(--scroll-thumb-hover) 3px,
+    var(--scroll-thumb-hover) 6px
+  );
+}
+
+/* --- Zone d'ecriture -------------------------------------------------------
+   Serif, colonne etroite, interlignage genereux : on lit et on ecrit ici
+   pendant des heures, la mise en page compte autant que dans un livre. */
+
+/*
+ * La feuille est cliquable de bord a bord.
+ *
+ * Auparavant la zone editable etait une colonne de 68ch centree, haute
+ * seulement de son texte : son `min-height: 100%` se mesurait contre une
+ * enveloppe de hauteur automatique, ou un pourcentage ne vaut rien. Sur une
+ * note vide, la seule cible etait la ligne du texte fantome — il fallait la
+ * viser pour commencer a ecrire.
+ *
+ * La colonne de lecture n'est donc plus une largeur maximale mais une marge
+ * interne de la zone editable, et le panneau ne garde plus de rembourrage a
+ * lui : le contenteditable occupe desormais chaque pixel du panneau, marges
+ * comprises. Un clic n'importe ou y pose le curseur — a la ligne et a
+ * l'endroit vises — et le glisser-selectionner part aussi des marges.
+ */
+.notes-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  cursor: text;
+  /* Le conteneur dont la feuille mesure sa marge basse. */
+  container-type: size;
+}
+
+/* Le cadre commun a la feuille et aux commandes qui se posent dessus. */
+.notes-stage {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* L'enveloppe posee par EditorContent : elle transmet la hauteur du panneau a
+   la zone editable, qu'un pourcentage n'aurait pas su franchir. */
+.notes-sheet {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.notes-editor {
+  font-family: var(--font-read);
+  font-size: 15.5px;
+  line-height: 1.72;
+  color: var(--text);
+  flex: 1;
+  width: 100%;
+  /* La colonne de texte reste large de 68ch et centree ; au-dela, ce sont les
+     marges de la zone editable, et non le vide autour d'elle. A gauche, la
+     marge ne descend jamais sous la largeur reservee au repere d'ancrage :
+     autrement le numero de page mordait sur le texte des que le panneau
+     devenait etroit. */
+  padding-left: max(var(--mark-width), (100% - 68ch) / 2);
+  padding-right: max(var(--space-5), (100% - 68ch) / 2);
+  /* En bas, trois quarts de panneau de marge : la derniere ligne ecrite peut
+     ainsi remonter a hauteur des yeux au lieu de rester collee au bord
+     inferieur, ou l'on ecrit la tete baissee. Mesuree sur le panneau (`cqh`)
+     et non sur la fenetre : c'est lui qui defile. C'est de la feuille, pas du
+     vide — un clic y pose le curseur comme partout ailleurs. */
+  padding-block: var(--space-5) max(var(--space-8), 75cqh);
+  cursor: text;
+}
+
+.notes-editor:focus {
+  outline: none;
+}
+
+/* Le navigateur pose de lui-meme un `margin-block: 1em` sur un paragraphe, une
+   liste, une citation. C'etait cette marge basse — la plus grande des deux —
+   qui l'emportait a la fusion, si bien que la regle ci-dessous ne decidait de
+   rien et qu'aucune autre ne pouvait rapprocher deux blocs. On la remise : ce
+   qui espace deux blocs est ecrit ici, et nulle part ailleurs. */
+.notes-editor > * {
+  margin-block: 0;
+}
+
+.notes-editor > * + * {
+  margin-top: 0.85em;
+}
+
+/* Ce qui suit une ligne vide ne s'en ecarte pas davantage : la ligne vide est
+   deja l'espace. Deux lignes vides de suite ne sont pas deux paragraphes, c'est
+   du vide, et le vide avance d'une ligne a la fois — sans cela, le remplissage
+   d'un clic dans le bas de la feuille (un paragraphe par ligne, pour que les
+   commandes de bloc ne saisissent que la ligne du curseur) avancerait d'une
+   ligne et demie a chaque fois.
+
+   La regle ne lit que la ligne du dessus, jamais le paragraphe lui-meme. Elle
+   visait autrefois deux lignes vides, si bien que le premier caractere tape
+   sur la seconde lui rendait sa marge : la ligne sautait de 0,85 em sous les
+   doigts. Un paragraphe vide de ProseMirror n'a pour enfant que le saut de
+   ligne qui lui donne sa hauteur, d'ou le `br:only-child`. */
+.notes-editor > :is(p:empty, p:has(> br:only-child)) + p {
+  margin-top: 0;
+}
+
+/*
+ * Volontairement rien d'autre que la taille ne change ici : la police, la
+ * couleur et la graisse restent celles du corps du texte. Les faire varier en
+ * plus de la taille est ce qui rendait les anciens boutons T1/T2/T3
+ * deroutants — un simple changement de taille de police, comme dans Word, ne
+ * doit produire qu'un changement de taille.
+ */
+.notes-editor h1,
+.notes-editor h2,
+.notes-editor h3 {
+  font-family: inherit;
+  font-weight: inherit;
+  color: inherit;
+  line-height: 1.3;
+  margin-top: 1.5em;
+  margin-bottom: 0.4em;
+}
+
+/* Accordees aux paliers de NotesToolbar.tsx : 16 (normal) / 18 / 20 / 24. */
+.notes-editor h3 {
+  font-size: 18px;
+}
+
+.notes-editor h2 {
+  font-size: 20px;
+}
+
+.notes-editor h1 {
+  font-size: 24px;
+}
+
+.notes-editor ul,
+.notes-editor ol {
+  padding-left: 1.3em;
+}
+
+.notes-editor li {
+  margin-top: 0.25em;
+}
+
+.notes-editor li::marker {
+  color: var(--text-ghost);
+}
+
+/*
+ * Ou se place le marqueur, et pourquoi cela depend de l'alignement.
+ *
+ * Aligne a gauche, le marqueur reste peint hors du flux, a gauche de la boite de
+ * la puce : les lignes suivantes d'un element long s'alignent alors sous le
+ * texte et non sous le marqueur. C'est le retrait suspendu, celui de Word et de
+ * Notion, et il n'y a pas de raison d'y renoncer.
+ *
+ * Centre ou a droite, en revanche, un marqueur hors du flux ne participe a aucun
+ * alignement en ligne : le texte se centrait et la puce restait collee a gauche.
+ * Le faire rentrer dans le flux par `list-style-position: inside` ne suffit pas —
+ * le marqueur y prend sa propre ligne des que l'element contient un bloc, ce qui
+ * est toujours le cas ici puisque TipTap met un paragraphe dans chaque puce. On
+ * le remplace donc par une marque en ligne, posee au debut de ce paragraphe :
+ * elle est du texte parmi le texte, et se centre avec lui, sur la meme ligne.
+ */
+.notes-editor li[style*='center'],
+.notes-editor li[style*='right'] {
+  list-style: none;
+}
+
+.notes-editor :is(ul, ol) > li[style*='center'] > p::before,
+.notes-editor :is(ul, ol) > li[style*='right'] > p::before {
+  color: var(--text-ghost);
+}
+
+.notes-editor ul > li[style*='center'] > p::before,
+.notes-editor ul > li[style*='right'] > p::before {
+  content: '•\00a0';
+}
+
+/* Le compteur implicite de l'element de liste continue d'avancer : c'est
+   `display: list-item` qui l'incremente, pas la presence d'un marqueur. La
+   numerotation reste donc juste quand une seule puce de la liste est centree. */
+.notes-editor ol > li[style*='center'] > p::before,
+.notes-editor ol > li[style*='right'] > p::before {
+  content: counter(list-item) '.\00a0';
+}
+
+/* Le retrait de la liste n'a plus de sens quand le marqueur est entre dans le
+   flux : il decalerait le bloc centre vers la droite. */
+.notes-editor :is(ul, ol):has(> li[style*='center'], > li[style*='right']) {
+  padding-left: 0;
+}
+
+.notes-editor blockquote {
+  margin-left: 0;
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--brass-line);
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.notes-editor code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  /* La feuille est presque blanche : un fond blanc ne se verrait pas. */
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 0.08em 0.35em;
+}
+
+.notes-editor pre {
+  background: var(--paper-deep);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  overflow-x: auto;
+}
+
+.notes-editor pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12.5px;
+}
+
+.notes-editor a {
+  color: var(--brass-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.notes-editor mark {
+  /* Teinte par defaut quand le surlignage n'a pas de couleur propre. Les
+     surlignages colores portent leur teinte en style en ligne, deja
+     translucide pour que le texte reste lisible par-dessus. */
+  background: var(--brass-wash);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0.05em 0.15em;
+  box-decoration-break: clone;
+}
+
+.notes-editor hr {
+  border: none;
+  border-top: 1px solid var(--rule-strong);
+  margin: var(--space-5) 0;
+}
+
+/* Texte fantome quand la note est vide. */
+.notes-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--text-ghost);
+  font-style: italic;
+}
+
+/* --- Tableaux ---------------------------------------------------------------
+   Un tableau de cours n'est pas une feuille de calcul : il se lit comme un
+   paragraphe ordonne. Le defaut ne trace donc que des filets horizontaux d'un
+   cheveu — aucun trait vertical, aucun cadre, aucun aplat d'en-tete : c'est ce
+   que font Linear, Notion et la typographie classique (Butterick : couper
+   toutes les bordures, puis n'en rendre que le strict necessaire ; Few : le
+   blanc groupe d'abord, les traits en dernier recours). Le quadrillage revient
+   pour qui le demande, avec les habillages « encadre » et « grille ».
+
+   Les memes regles servent a l'apercu d'une proposition : ce qu'on accepte doit
+   avoir exactement l'aspect de ce qui sera ecrit. Attention, les deux n'ont pas
+   la meme charpente — l'editeur ne produit jamais de <thead> et pose ses <th>
+   dans la premiere ligne du <tbody>, la ou l'analyseur Markdown de l'apercu
+   ecrit un vrai <thead>. D'ou les selecteurs d'en-tete en deux temps ci-dessous :
+   un simple `tr:first-child` designerait aussi la premiere ligne du corps, qui
+   est « premier enfant » de son <tbody>. */
+
+:is(.notes-editor, .note-proposal-preview) .tableWrapper {
+  margin: 1.4em 0;
+  overflow-x: auto;
+  /* Arrive au bout d'un tableau large, la roulette ne doit pas se mettre a
+     emporter le panneau qui le porte. */
+  overscroll-behavior-x: contain;
+}
+
+:is(.notes-editor, .note-proposal-preview) table {
+  width: 100%;
+  border-collapse: collapse;
+  /* Largeurs libres : c'est le contenu qui repartit les colonnes. En `fixed`,
+     chacune recoit la meme part — une colonne de trois mots occupe autant de
+     place que la description qui en fait quinze, et toutes les cellules se
+     cassent en rubans de deux mots. */
+  table-layout: auto;
+  font-size: 0.94em;
+  /* L'interligne du texte courant (1,7) fait respirer chaque cellule comme un
+     paragraphe et creuse la grille de trous. Dans un tableau, on resserre. */
+  line-height: 1.45;
+  /* Les chiffres d'une colonne s'alignent : c'est ce qu'on lit dans un tableau
+     de finance, et une chasse variable les rend illisibles. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Des qu'une colonne a ete tiree a la main, les largeurs se figent : sans quoi
+   le navigateur les recalculerait a chaque frappe et la colonne tiree ne
+   tiendrait pas. L'attribut est pose par la vue du tableau (editor-table.ts),
+   qui seule sait si une largeur existe. */
+:is(.notes-editor, .note-proposal-preview) table[data-largeurs='tirees'] {
+  table-layout: fixed;
+}
+
+/* Dans l'apercu, le tableau porte lui-meme son cadre eventuel — et un cadre ne
+   s'arrondit pas en `collapse` : les filets appartiennent alors a la table, pas
+   aux cellules, et le rayon est ignore. `separate` sans espacement donne le
+   meme trait d'un pixel, puisqu'aucune cellule n'en porte deux du meme cote. */
+.note-proposal-preview table {
+  margin: 1.1em 0;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+:is(.notes-editor, .note-proposal-preview) :is(th, td) {
+  /* Un seul trait, horizontal : la gouttiere blanche separe les colonnes mieux
+     qu'un filet ne le ferait. */
+  border-bottom: 1px solid var(--rule);
+  /* La cellule de bord tombe sur la marge du texte : le tableau s'aligne sur le
+     paragraphe qui le precede au lieu de flotter en encart. */
+  padding: 7px 18px 7px 0;
+  vertical-align: top;
+  /* `start`, jamais `left` : l'alignement venu du Markdown (`| ---: |`) arrive
+     en attribut de presentation, de specificite nulle, et `left` le tuerait. */
+  text-align: start;
+  /* Une URL ou un mot long ne pousse pas sa colonne hors du panneau. `anywhere`
+     serait un piege : cette valeur-la entre dans le calcul de la largeur
+     minimale de la colonne, si bien que le navigateur la croit reductible a une
+     lettre et coupe « Multiple » en « Mul / tipl / e ». */
+  overflow-wrap: break-word;
+  /* La poignee de largeur se pose contre le bord de la cellule. */
+  position: relative;
+}
+
+/* L'alignement demande par le Markdown, que l'attribut seul ne saurait tenir. */
+:is(.notes-editor, .note-proposal-preview) :is(th, td)[align='center'] {
+  text-align: center;
+}
+
+:is(.notes-editor, .note-proposal-preview) :is(th, td)[align='right'] {
+  text-align: right;
+}
+
+:is(.notes-editor, .note-proposal-preview) :is(th, td):last-child {
+  padding-right: 0;
+}
+
+/* La derniere ligne ne se referme pas : un tableau de texte n'a pas de pied. */
+:is(.notes-editor, .note-proposal-preview) tbody tr:last-child :is(th, td) {
+  border-bottom: none;
+}
+
+/* L'en-tete se distingue par sa graisse et par le trait plus franc qui le
+   souligne, pas par un aplat gris. */
+:is(.notes-editor, .note-proposal-preview) th {
+  background: var(--table-head);
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Suivre une ligne du regard d'un bout a l'autre : c'est le service que rend le
+   zebrage, sans son bruit permanent — les deux etudes d'A List Apart ne lui
+   mesurent aucun gain sous une dizaine de lignes. */
+:is(.notes-editor, .note-proposal-preview) tbody tr:hover :is(th, td) {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+/* Deux facons de tracer, une couleur d'accent. Le reglage vit sur le <table>
+   lui-meme, ou l'attribut survit a l'aller-retour Markdown ; l'accent reprend
+   les cinq codes semantiques, si bien qu'un tableau vert est un tableau de
+   definitions, comme un encadre vert. */
+
+:is(.notes-editor, .note-proposal-preview) table {
+  --table-accent: var(--brass);
+  --table-head: transparent;
+  --table-head-rule: var(--rule-strong);
+}
+
+:is(.notes-editor, .note-proposal-preview) table[data-accent='retenir'] {
+  --table-accent: var(--hl-retenir);
+}
+:is(.notes-editor, .note-proposal-preview) table[data-accent='incompris'] {
+  --table-accent: var(--hl-incompris);
+}
+:is(.notes-editor, .note-proposal-preview) table[data-accent='definition'] {
+  --table-accent: var(--hl-definition);
+}
+:is(.notes-editor, .note-proposal-preview) table[data-accent='formule'] {
+  --table-accent: var(--hl-formule);
+}
+:is(.notes-editor, .note-proposal-preview) table[data-accent='transversal'] {
+  --table-accent: var(--hl-transversal);
+}
+
+/* Un accent choisi teinte le trait de l'en-tete — c'est lui qui porte la
+   couleur, plutot qu'un fond de plus a decoder. */
+:is(.notes-editor, .note-proposal-preview) table[data-accent]:not([data-accent='laiton']) {
+  --table-head-rule: color-mix(in srgb, var(--table-accent) 55%, transparent);
+}
+
+/* La premiere ligne porte le trait d'accent, quel que soit le design. */
+:is(.notes-editor, .note-proposal-preview) thead tr :is(th, td),
+:is(.notes-editor, .note-proposal-preview) table:not(:has(thead)) tr:first-child :is(th, td) {
+  border-bottom: 1px solid var(--table-head-rule);
+}
+
+/* --- Encadre : la grille assumee -------------------------------------------
+   Filets dans les deux sens et cadre exterieur, pour comparer colonne par
+   colonne. C'est ici, et seulement ici, que les cellules reprennent un
+   rembourrage symetrique : contre un cadre, une cellule a besoin d'air des
+   deux cotes. */
+
+:is(.notes-editor, .note-proposal-preview)
+  table:is([data-design='encadre'], [data-design='grille'])
+  :is(th, td) {
+  padding: 7px 12px;
+  border-right: 1px solid var(--rule);
+}
+
+:is(.notes-editor, .note-proposal-preview)
+  table:is([data-design='encadre'], [data-design='grille'])
+  :is(th, td):last-child {
+  border-right: none;
+}
+
+.notes-editor .tableWrapper:has(> table:is([data-design='encadre'], [data-design='grille'])) {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+}
+
+.note-proposal-preview table:is([data-design='encadre'], [data-design='grille']) {
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+}
+
+/* L'en-tete encadre se pose sur un aplat souffle et un trait franc. */
+:is(.notes-editor, .note-proposal-preview) table[data-design='encadre'] {
+  --table-head: color-mix(in srgb, var(--table-accent) 11%, var(--paper-sheet));
+  --table-head-rule: var(--table-accent);
+}
+
+/* Les filets se teintent de l'accent : entre deux traits d'un cheveu et une
+   grille franche, un ton suffit — l'epaisseur, elle, resterait d'un pixel. */
+:is(.notes-editor, .note-proposal-preview) table[data-design='encadre'] :is(th, td) {
+  border-right-color: color-mix(in srgb, var(--table-accent) 24%, var(--rule-strong));
+  border-bottom-color: color-mix(in srgb, var(--table-accent) 24%, var(--rule-strong));
+}
+
+:is(.notes-editor, .note-proposal-preview) table[data-design='encadre'] thead tr :is(th, td),
+:is(.notes-editor, .note-proposal-preview)
+  table[data-design='encadre']:not(:has(thead))
+  tr:first-child
+  :is(th, td) {
+  border-bottom: 2px solid var(--table-head-rule);
+}
+
+/* --- Registre : le releve imprime -------------------------------------------
+   Aucun filet vertical non plus, mais l'en-tete change de voix : capitales
+   etroites de la police d'interface, et un double trait qui le separe du corps
+   comme la ligne de totaux d'un releve. */
+
+:is(.notes-editor, .note-proposal-preview) table[data-design='registre'] th {
+  background: none;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+:is(.notes-editor, .note-proposal-preview) table[data-design='registre'] thead tr :is(th, td),
+:is(.notes-editor, .note-proposal-preview)
+  table[data-design='registre']:not(:has(thead))
+  tr:first-child
+  :is(th, td) {
+  border-bottom: 3px double var(--table-accent);
+}
+
+/* --- Grille : aucune ligne au-dessus des autres ------------------------------
+   Le meme trait partout, y compris sous la premiere ligne. Utile quand le
+   tableau n'a pas de vraie ligne d'en-tete, seulement des cellules egales. */
+
+:is(.notes-editor, .note-proposal-preview) table[data-design='grille'] {
+  --grille-rule: color-mix(in srgb, var(--table-accent) 22%, var(--rule-strong));
+}
+
+:is(.notes-editor, .note-proposal-preview) table[data-design='grille'] :is(th, td) {
+  background: none;
+  font-weight: 400;
+  color: var(--text);
+  border-right-color: var(--grille-rule);
+  border-bottom-color: var(--grille-rule);
+}
+
+:is(.notes-editor, .note-proposal-preview) table[data-design='grille'] thead tr :is(th, td),
+:is(.notes-editor, .note-proposal-preview)
+  table[data-design='grille']:not(:has(thead))
+  tr:first-child
+  :is(th, td) {
+  border-bottom: 1px solid var(--grille-rule);
+}
+
+/* Les paragraphes d'une cellule ne poussent pas la ligne : dans un tableau, la
+   marge verticale du texte courant creuse des trous. */
+:is(.notes-editor, .note-proposal-preview) :is(th, td) > * {
+  margin: 0;
+}
+
+:is(.notes-editor, .note-proposal-preview) :is(th, td) > * + * {
+  margin-top: 0.4em;
+}
+
+/* La cellule visee par la selection, et la poignee de largeur. */
+.notes-editor .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--brass-wash);
+  pointer-events: none;
+}
+
+.notes-editor .column-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -1px;
+  width: 2px;
+  background: var(--brass);
+  pointer-events: none;
+}
+
+.resize-cursor {
+  cursor: col-resize;
+}
+
+/* --- Encadres semantiques ---------------------------------------------------
+   Memes cinq couleurs que les surlignages, meme sens. Le fond est un souffle
+   de la couleur sur la teinte du papier — assez pour reconnaitre un encadre de
+   definition de loin, jamais assez pour concurrencer le texte. */
+
+[data-callout] {
+  --callout: var(--hl-retenir);
+
+  margin: 1.4em 0;
+  padding: 0.7em 1em 0.8em;
+  border-left: 3px solid var(--callout);
+  border-radius: 3px var(--radius) var(--radius) 3px;
+  background: color-mix(in srgb, var(--callout) 7%, var(--paper-sheet));
+}
+
+[data-callout='incompris'] {
+  --callout: var(--hl-incompris);
+}
+[data-callout='definition'] {
+  --callout: var(--hl-definition);
+}
+[data-callout='formule'] {
+  --callout: var(--hl-formule);
+}
+[data-callout='transversal'] {
+  --callout: var(--hl-transversal);
+}
+
+/* Le premier bloc est le titre : c'est lui qui porte la couleur, en toutes
+   lettres, plutot qu'une pastille de plus a decoder. */
+[data-callout] > :first-child {
+  margin: 0 0 0.35em;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--callout) 72%, var(--text));
+}
+
+[data-callout] > * + * {
+  margin-top: 0.5em;
+}
+
+[data-callout] > :last-child {
+  margin-bottom: 0;
+}
+
+/* --- Schemas ----------------------------------------------------------------
+   Cartes mentales, schemas de flux, frises. L'image est recomposee a chaque
+   affichage a partir de la syntaxe : la note reste du texte. */
+
+.note-diagram {
+  position: relative;
+  margin: 1.5em 0;
+  padding: var(--space-3);
+  /* La carte est plus soutenue que la feuille et que les boites qu'elle
+     porte : c'est cet ecart de trois tons qui detache le schema du texte
+     sans qu'aucun trait n'ait a s'epaissir. */
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  text-align: center;
+  overflow-x: auto;
+}
+
+.note-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* La frise chronologique dessine son axe et ses traits de rappel avec des
+   couleurs ecrites en dur — un axe noir de deux pixels, des soulignes bleus et
+   turquoise — qu'aucune variable de theme ne gouverne.
+
+   `!important` est ici le seul recours, et non une facilite : Mermaid ecrit sa
+   feuille de style a l'interieur du SVG en prefixant chaque regle par
+   l'identifiant du dessin. Un selecteur d'identifiant l'emporte sur n'importe
+   quel nombre de classes — aucune specificite atteignable de l'exterieur ne
+   passerait devant. */
+:is(.note-diagram, .note-proposal-preview) svg [stroke='black'] {
+  stroke: var(--text-faint) !important;
+}
+
+:is(.note-diagram, .note-proposal-preview) svg [class*='node-line'] {
+  stroke: var(--rule-strong) !important;
+}
+
+/* --- Une frise se passe de cadre --------------------------------------------
+   Une frise porte deja sa structure : un axe, des jalons alignes dessus. Le
+   cadre ne delimitait rien qu'on ne voyait pas, il ajoutait seulement un
+   rectangle de plus a une page qui en a assez. Il ne revient qu'a l'approche
+   de la souris, et sous sa seule bordure — le fond, lui, ne bouge jamais :
+   c'est ce qui fait que la frise ne « s'allume » pas au passage. */
+.note-diagram[data-kind='timeline'] {
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border-color: transparent;
+  transition: border-color var(--fast) var(--ease);
+}
+
+.note-diagram[data-kind='timeline']:hover,
+.note-diagram[data-kind='timeline'][data-selected],
+.note-diagram[data-kind='timeline'][data-editing] {
+  border-color: var(--rule-strong);
+}
+
+/* L'axe est la colonne vertebrale d'une frise : il doit se suivre d'un bout a
+   l'autre sans peser plus que les jalons qu'il porte. */
+.note-diagram[data-kind='timeline'] svg .lineWrapper line {
+  stroke: var(--text-ghost) !important;
+  stroke-width: 1.5px !important;
+}
+
+.note-diagram[data-kind='timeline'] svg .timeline-node line {
+  stroke: var(--rule-strong) !important;
+}
+
+/* --- Schemas de flux --------------------------------------------------------
+   Le trait relie, il ne raconte rien : il se pose derriere les boites, dans le
+   ton le plus clair de l'encre. Seule l'epaisseur « ==> » garde la sienne, qui
+   est ecrite dans la syntaxe et veut donc dire quelque chose.
+
+   Mermaid pose les deux classes d'epaisseur sur un trait epais : viser
+   « normal » l'aurait aplati avec les autres. */
+.note-diagram[data-kind='flowchart'] svg .flowchart-link {
+  stroke: var(--text-ghost) !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.note-diagram[data-kind='flowchart'] svg .flowchart-link:not(.edge-thickness-thick) {
+  stroke-width: 1.5px !important;
+}
+
+.note-diagram[data-kind='flowchart'] svg .marker {
+  fill: var(--text-ghost) !important;
+  stroke: var(--text-ghost) !important;
+}
+
+.note-diagram[data-kind='flowchart'] svg .node rect,
+.note-diagram[data-kind='flowchart'] svg .node polygon,
+.note-diagram[data-kind='flowchart'] svg .node path,
+.note-diagram[data-kind='flowchart'] svg .node circle {
+  stroke: var(--rule-strong) !important;
+  stroke-width: 1.1px !important;
+}
+
+/* Une etiquette de fleche se lit, elle ne se declame pas. */
+.note-diagram[data-kind='flowchart'] svg .edgeLabel foreignObject div {
+  font-size: 11px !important;
+  color: var(--text-faint) !important;
+}
+
+/* --- Cartes mentales --------------------------------------------------------
+   Les rubans de Mermaid montent jusqu'a dix-sept pixels : ils recouvraient les
+   boites qu'ils relient et la carte devenait un noeud de rubans. Une branche
+   se suit tres bien a trois pixels. L'epaisseur decroit avec la profondeur —
+   c'est ce qui fait lire un tronc et ses ramifications plutot qu'un buisson de
+   traits tous egaux. */
+.note-diagram[data-kind='mindmap'] svg path.edge {
+  stroke-width: 1.8px !important;
+  stroke-linecap: round;
+}
+
+.note-diagram[data-kind='mindmap'] svg path.edge.edge-depth-1 {
+  stroke-width: 3.2px !important;
+}
+
+.note-diagram[data-kind='mindmap'] svg path.edge.edge-depth-2 {
+  stroke-width: 2.4px !important;
+}
+
+/* Le trait sous un noeud sans cadre : c'est tout ce qu'il a pour se poser. */
+.note-diagram[data-kind='mindmap'] svg .mindmap-node line {
+  stroke-width: 2px !important;
+}
+
+/* Un schema dans l'apercu d'une proposition. Il lui faut la meme carte que
+   dans la note : les boites sont taillees dans une teinte a peine plus claire
+   que la feuille, et poseees a meme le blanc de l'apercu elles disparaissent.
+   Sa hauteur est bornee pour qu'on juge le schema entier d'un coup d'oeil,
+   plutot que de le faire defiler avant d'accepter. */
+.note-proposal-preview [data-type='diagram'] {
+  margin: 0.8em 0;
+  padding: var(--space-2);
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.note-proposal-preview [data-type='diagram'] svg {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 165px;
+}
+
+.note-diagram[data-selected] {
+  border-color: var(--brass-line);
+  box-shadow: 0 0 0 3px var(--brass-wash);
+}
+
+/* Les commandes ne paraissent qu'au survol : un schema se regarde d'abord. */
+.note-diagram-tools {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.note-diagram:hover .note-diagram-tools,
+.note-diagram[data-selected] .note-diagram-tools {
+  opacity: 1;
+}
+
+.note-diagram-tool {
+  padding: 2px 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-overlay);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.note-diagram-tool:hover {
+  color: var(--brass-strong);
+  border-color: var(--brass-line);
+}
+
+/* Le cadre du dessin, repere des zones cliquables : elles se posent en absolu
+   dedans, ce qui les fait suivre le defilement sans aucun recalcul. */
+.note-diagram-stage {
+  position: relative;
+}
+
+.note-diagram[data-editing] {
+  border-color: var(--brass-line);
+}
+
+/* Pendant la modification, la barre du bas dit ce qu'on peut faire. */
+.note-diagram-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--rule);
+}
+
+.note-diagram-hint {
+  margin-right: auto;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  text-align: left;
+}
+
+/* --- Modifier un schema au clic ---------------------------------------------
+   Une zone par element du dessin, posee exactement sur sa forme. Elle ne
+   montre rien tant qu'on ne la survole pas : on modifie un schema en le
+   regardant, il doit donc rester lisible pendant qu'on le modifie. */
+
+.note-diagram-layer {
+  position: absolute;
+  inset: 0;
+  /* Seules les zones recoivent la souris, jamais le vide entre elles. */
+  pointer-events: none;
+}
+
+.note-diagram-hit {
+  position: absolute;
+  pointer-events: auto;
+  cursor: text;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.note-diagram-hit:hover {
+  background: var(--brass-wash);
+  border-color: var(--brass-line);
+}
+
+/* La boite d'ou part la fleche en cours, et celles qui peuvent la recevoir. */
+.note-diagram-hit[data-linking] {
+  background: var(--brass-wash);
+  border-color: var(--brass);
+}
+
+.note-diagram-hit[data-target] {
+  border-color: var(--brass-line);
+  border-style: dashed;
+  cursor: crosshair;
+}
+
+/* L'etiquette d'une fleche est souvent vide : sans un contour permanent, il n'y
+   aurait rien a viser. */
+.note-diagram-hit[data-kind='edge'] {
+  border-style: dashed;
+  border-color: var(--rule-strong);
+}
+
+.note-diagram-marks {
+  position: absolute;
+  top: -11px;
+  right: -6px;
+  display: none;
+  gap: 3px;
+}
+
+.note-diagram-hit:hover .note-diagram-marks {
+  display: flex;
+}
+
+.note-diagram-mark {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--brass-line);
+  border-radius: 50%;
+  background: var(--paper-overlay);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.note-diagram-mark:hover {
+  background: var(--brass);
+  border-color: var(--brass);
+  color: var(--paper-sheet);
+}
+
+.note-diagram-mark--remove:hover {
+  background: var(--hl-incompris);
+  border-color: var(--hl-incompris);
+}
+
+.note-diagram-hit[data-editing] {
+  /* Le champ prend la place de la forme, et s'elargit si le mot est plus
+     long qu'elle — une boite etroite ne doit pas brider la frappe. */
+  min-width: 90px;
+  background: var(--paper-sheet);
+  border-color: var(--brass);
+  cursor: auto;
+}
+
+.note-diagram-input {
+  width: 100%;
+  height: 100%;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  text-align: center;
+  color: var(--text);
+}
+
+.note-diagram-input:focus {
+  outline: none;
+}
+
+/* Le choix de la forme se fait pendant qu'on nomme la boite : c'est le meme
+   geste, on ne le coupe pas en deux. */
+.note-diagram-shapes {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-overlay);
+  box-shadow: var(--shadow-soft);
+  z-index: 2;
+}
+
+.note-diagram-shape {
+  width: 26px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.note-diagram-shape:hover {
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+/* La vignette montre la forme, elle ne la nomme pas : on choisit un losange en
+   voyant un losange. Les caracteres unicode qui servaient a cela — ▭ ◇ ⬭ —
+   sont tires de polices differentes selon celle qui les porte, et n'avaient ni
+   la meme taille ni la meme graisse. */
+.note-diagram-glyph {
+  width: 18px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.note-diagram-glyph-head {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* --- Retirer un objet -------------------------------------------------------
+   Le meme geste pour un tableau, un encadre ou un schema : une croix nette,
+   qui ne se confond avec aucun autre bouton de la feuille. */
+
+.block-cross {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--text);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--paper-sheet);
+  cursor: pointer;
+  flex: none;
+}
+
+.block-cross:hover {
+  background: var(--hl-incompris);
+}
+
+/* La barre d'un tableau ou d'un encadre. Elle se pose sur le bord superieur,
+   alignee a droite, dans la marge que l'objet laisse au-dessus de lui. */
+
+.block-tools-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.block-tools {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Ancree sur le coin superieur droit de l'objet, posee juste au-dessus. */
+  transform: translate(-100%, -100%);
+  padding-bottom: 5px;
+  pointer-events: auto;
+}
+
+.block-tools-button {
+  padding: 2px 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper-overlay);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.block-tools-button:hover,
+.block-tools-button[data-active='true'] {
+  color: var(--brass-strong);
+  border-color: var(--brass-line);
+}
+
+.block-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 5;
+  width: max-content;
+  padding: var(--space-2);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius);
+  background: var(--paper-overlay);
+  box-shadow: var(--shadow-soft);
+  text-align: left;
+}
+
+.block-menu-title {
+  margin-bottom: 5px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+}
+
+.block-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: var(--space-2);
+}
+
+.block-menu-row--end {
+  justify-content: flex-end;
+  margin-bottom: 0;
+}
+
+.block-menu-chip {
+  padding: 3px 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.block-menu-chip:hover {
+  border-color: var(--brass-line);
+  color: var(--brass-strong);
+}
+
+.block-menu-chip[data-active='true'] {
+  border-color: var(--brass);
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+.block-menu-dot {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  /* Le liseré de selection se pose a l'exterieur, pour ne pas rogner la
+     pastille : sa couleur est la seule information qu'elle porte. */
+  box-shadow: 0 0 0 1px var(--rule-strong) inset;
+}
+
+.block-menu-dot[data-active='true'] {
+  border-color: var(--paper-overlay);
+  box-shadow: 0 0 0 2px var(--brass);
+}
+
+.note-diagram-source {
+  display: block;
+  width: 100%;
+  min-height: 150px;
+  padding: var(--space-2);
+  border: 1px solid var(--brass-line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  text-align: left;
+  resize: vertical;
+}
+
+.note-diagram-source:focus {
+  outline: none;
+}
+
+/* Une syntaxe fautive ne fait pas disparaitre le schema : elle montre ce qui
+   ne va pas, et garde le texte a corriger sous la main. */
+.note-diagram-failure {
+  text-align: left;
+}
+
+.note-diagram-failure-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--hl-incompris);
+}
+
+.note-diagram-failure-detail,
+.note-diagram-failure-source {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* --- Proposition de l'assistant ---------------------------------------------
+   L'apercu d'une modification proposee par l'IA. Rien ne s'ecrit tant que
+   « Appliquer » n'a pas ete clique : la carte est la salle d'attente. */
+
+.note-proposal {
+  flex: none;
+  margin: var(--space-3) var(--space-4) 0;
+  background: var(--paper-overlay);
+  border: 1px solid var(--brass-line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-panel);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: note-proposal-in 160ms var(--ease);
+}
+
+@keyframes note-proposal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.note-proposal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.note-proposal-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--brass-strong);
+}
+
+.note-proposal[data-stage='stale'] .note-proposal-title {
+  color: var(--text-dim);
+}
+
+/* Le texte se compose encore : le titre respire, pour dire que ca bouge. */
+.note-proposal[data-stage='writing'] .note-proposal-title {
+  animation: note-writing-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes note-writing-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-proposal[data-stage='writing'] .note-proposal-title {
+    animation: none;
+  }
+}
+
+.note-proposal-kind {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.note-proposal-section {
+  border-top: 1px solid var(--rule);
+}
+
+.note-proposal-section-title {
+  padding: var(--space-1) var(--space-3) 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+}
+
+/* Le contenu propose, rendu comme il apparaitra dans la note. */
+.note-proposal-preview {
+  max-height: 230px;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-read);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+/* Le passage qui serait remplace : present mais en retrait. */
+.note-proposal-preview--old {
+  opacity: 0.55;
+  max-height: 120px;
+}
+
+.note-proposal-preview > * + * {
+  margin-top: 0.6em;
+}
+
+.note-proposal-preview ul,
+.note-proposal-preview ol {
+  padding-left: 1.3em;
+}
+
+.note-proposal-preview mark {
+  border-radius: 2px;
+  padding: 0.05em 0.15em;
+  box-decoration-break: clone;
+}
+
+.note-proposal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--rule);
+}
+
+.note-proposal-apply,
+.note-proposal-refuse,
+.note-proposal-undo {
+  font-size: var(--text-sm);
+  padding: 3px 12px;
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.note-proposal-apply {
+  background: var(--brass-strong);
+  color: var(--on-brass);
+}
+
+.note-proposal-apply:hover {
+  background: var(--brass-deep);
+}
+
+.note-proposal-refuse,
+.note-proposal-undo {
+  color: var(--text-dim);
+}
+
+.note-proposal-refuse:hover,
+.note-proposal-undo:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.note-proposal-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.note-proposal-close {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.note-proposal-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* --- Indicateur d'enregistrement ------------------------------------------- */
+
+.notes-status {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex: none;
+}
+
+/* --- Ce que le bandeau des notes abandonne quand il retrecit ---------------
+   Memes regles que pour le cours : seuils sur la boite de contenu du bandeau,
+   chacun egal a la place que reclame l'etat juste au-dessus, mesuree sur le
+   cas le plus charge — ici un compteur a cinq chiffres.
+
+     tout                       478 px
+     sans le compteur de mots   403 px
+     sans « Trier par page »    295 px
+     sans « Mettre au propre »  170 px
+
+   Le compteur part en premier parce qu'il n'est qu'une information, et que
+   l'indicateur d'enregistrement — celui qu'on cherche vraiment — reste. Les
+   deux actions suivent, la plus specialisee d'abord ; toutes deux restent
+   accessibles a l'assistant, a qui on peut simplement le demander. */
+@container bandeau (max-width: 478px) {
+  .panel-head .notes-count {
+    display: none;
+  }
+}
+
+@container bandeau (max-width: 403px) {
+  .panel-head .notes-sort {
+    display: none;
+  }
+}
+
+@container bandeau (max-width: 295px) {
+  .panel-head .notes-tidy {
+    display: none;
+  }
+}
+
+.notes-count {
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+/* L'etat reste affiche, y compris au repos : il s'efface auparavant apres deux
+   secondes, et rien ne repondait plus a « est-ce que c'est enregistre ? ».
+   C'est une information courte, discrete, mais permanente. */
+.save-indicator {
+  position: relative;
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+  letter-spacing: 0.03em;
+  transition: color var(--normal) var(--ease);
+}
+
+.save-indicator[data-state='saved'] {
+  color: var(--text-faint);
+}
+
+.save-indicator[data-state='error'] {
+  color: var(--hl-incompris);
+}
+
+/* Accuse de reception de ⌘S : une lueur laiton qui traverse le libelle. Sans
+   elle, appuyer sur ⌘S alors que tout est deja ecrit ne produirait rien du
+   tout a l'ecran, et le geste semblerait ignore. */
+.save-pulse {
+  position: absolute;
+  inset: -3px -6px;
+  border-radius: var(--radius-sm);
+  background: var(--brass-wash);
+  animation: save-pulse 900ms var(--ease) forwards;
+  pointer-events: none;
+}
+
+@keyframes save-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .save-pulse {
+    animation-duration: 1ms;
+  }
+}

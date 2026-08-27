@@ -1,0 +1,472 @@
+/*
+ * La coque d'accueil : une barre laterale a gauche, une page a droite.
+ *
+ * Depuis la refonte de l'accueil, la coque est un bureau creme (le meme ivoire
+ * que l'espace de travail) sur lequel flottent des plaques de verre : la barre
+ * de titre en pilule, la laterale en pilule elargie, la page en rectangle aux
+ * angles serres. La recette du verre vit dans tokens.css (--glass-*).
+ *
+ * La barre porte les grandes zones (matieres, flashcards, memoire) ; elle
+ * parle le type systeme, comme le reste de la coque.
+ */
+
+/* Le bureau creme est peint par .app derriere : la coque ne fait qu'espacer
+   ses plaques de verre — la laterale, puis la page. Elle porte aussi, en
+   calques absolus, l'ombre et le verre de la grande plaque : un filtre ou un
+   clip-path sur un ancetre coupe le backdrop-filter de ses descendants
+   (backdrop root — mesure au pixel pres), le verre doit donc vivre hors de
+   .hub-main, qui clippe et filtre. */
+.hub {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: var(--hub-gap);
+  padding: var(--hub-gap);
+  font-family: var(--font-system);
+}
+
+/* La pilule elargie de gauche. Le rayon s'arrete la ou commencerait a mordre
+   le premier element de navigation. */
+.hub-sidebar {
+  flex: none;
+  width: 208px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-5) var(--space-3);
+  border: var(--glass-border);
+  border-radius: 30px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+  transition: box-shadow 260ms var(--swift);
+}
+
+.hub-sidebar:hover {
+  box-shadow: var(--glass-shadow-hover);
+}
+
+.hub-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.006em;
+  color: var(--shell-text-mid);
+  transition:
+    background-color var(--fast) var(--swift),
+    color var(--fast) var(--swift);
+}
+
+.hub-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--shell-text-dim);
+  transition: color var(--fast) var(--swift);
+}
+
+.hub-item:hover {
+  background: rgba(0, 0, 0, 0.045);
+  color: var(--shell-text);
+}
+
+/* L'element actif est une carte posee, pas un aplat de couleur : la coque
+   reste neutre, ce sont les cartes de matieres qui ont le droit a la couleur. */
+.hub-item[data-active='true'] {
+  background: var(--shell-surface);
+  color: var(--shell-text);
+  box-shadow:
+    0 0 0 1px var(--shell-line),
+    0 1px 2px rgba(15, 17, 22, 0.06);
+}
+
+.hub-item[data-active='true'] svg {
+  color: var(--shell-text);
+}
+
+/* Les parametres tombent au bas de la pilule, separes des trois zones de
+   travail par tout l'espace disponible plutot que par un filet. */
+.hub-item-foot {
+  margin-top: auto;
+}
+
+/* --- Les pages de la coque (flashcards, notes) ---------------------------- */
+
+/* La grande plaque de droite. Ses deux angles cote laterale ne sont pas de
+   simples arrondis : ils se prolongent dans l'interstice et epousent les
+   angles de la laterale sans jamais la toucher — l'arc de 38px est celui de
+   30px de la laterale decale de l'ecart (--hub-gap, 8px), et il rejoint les
+   bords haut et bas a 14.68px dans l'interstice (sqrt(38² − 30²) − 8). D'ou
+   une forme sur mesure (clip-path: shape) : la boite deborde d'autant dans
+   l'interstice par sa marge negative, et c'est le decoupage qui rend l'ecart.
+
+   La ou le prolongement rejoint le bord haut ou bas, la pointe est adoucie
+   par un conge de 6px, tangent a la fois au bord et a l'arc de 38px : centre
+   en (13.55, 6), tangences en (13.55, 0) et (8.53, 9.27) — toutes valeurs
+   derivees du meme cercle, pas de nombres libres.
+
+   Le decoupage emportant bordure et box-shadow, le verre est reconstruit en
+   calques separes, du fond vers la surface : l'ombre (silhouette remplie de
+   brun, floutee et decalee — .hub::before), le verre (la recette exacte des
+   deux autres plaques — .hub::after), le lisere (la silhouette evidee
+   d'elle-meme par evenodd, .hub-main::after), puis le contenu, releve d'un
+   cran (z-index) pour passer au-dessus des calques. Les deux calques de .hub
+   epousent la boite de .hub-main par leurs insets : 2 ecarts + les 208px de
+   la laterale − le debord de 14.68px. */
+.hub-main {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  margin-left: -14.68px;
+  padding-left: 14.68px;
+  clip-path: shape(
+    from 13.55px 0,
+    line to calc(100% - 16px) 0,
+    arc to 100% 16px of 16px cw,
+    line to 100% calc(100% - 16px),
+    arc to calc(100% - 16px) 100% of 16px cw,
+    line to 13.55px 100%,
+    arc to 8.53px calc(100% - 9.27px) of 6px cw,
+    arc to 14.68px calc(100% - 30px) of 38px ccw,
+    line to 14.68px 30px,
+    arc to 8.53px 9.27px of 38px ccw,
+    arc to 13.55px 0 of 6px cw
+  );
+}
+
+/* L'ombre portee de la grande plaque. Une boite sans fond : un box-shadow ne
+   peint jamais sous son element — une silhouette pleine floutee, si, et elle
+   teinterait tout le verre a travers sa transparence. Le contour exact des
+   prolongements n'a pas d'importance ici : dans un flou de 24px, un arrondi
+   de 16px et les crochets sont indistinguables. */
+.hub::before {
+  content: '';
+  position: absolute;
+  inset: var(--hub-gap) var(--hub-gap) var(--hub-gap) calc(2 * var(--hub-gap) + 208px);
+  pointer-events: none;
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(74, 58, 33, 0.06),
+    0 10px 24px -8px rgba(74, 58, 33, 0.12);
+  transition: box-shadow 260ms var(--swift);
+}
+
+/* Au survol, l'ombre respire — comme sur les deux autres plaques. */
+.hub:has(.hub-main:hover)::before {
+  box-shadow:
+    0 2px 4px rgba(74, 58, 33, 0.07),
+    0 16px 34px -10px rgba(74, 58, 33, 0.17);
+}
+
+/* La plaque de verre elle-meme : la recette de la laterale, decoupee sur
+   mesure, et l'arete de lumiere du haut en degrade. */
+.hub::after {
+  content: '';
+  position: absolute;
+  inset: var(--hub-gap) var(--hub-gap) var(--hub-gap)
+    calc(2 * var(--hub-gap) + 208px - 14.68px);
+  pointer-events: none;
+  clip-path: shape(
+    from 13.55px 0,
+    line to calc(100% - 16px) 0,
+    arc to 100% 16px of 16px cw,
+    line to 100% calc(100% - 16px),
+    arc to calc(100% - 16px) 100% of 16px cw,
+    line to 13.55px 100%,
+    arc to 8.53px calc(100% - 9.27px) of 6px cw,
+    arc to 14.68px calc(100% - 30px) of 38px ccw,
+    line to 14.68px 30px,
+    arc to 8.53px 9.27px of 38px ccw,
+    arc to 13.55px 0 of 6px cw
+  );
+  background-color: var(--glass-bg);
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 3px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 26px);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* Le lisere : la silhouette evidee d'elle-meme, il ne reste que le pixel du
+   bord. Peint apres le verre, sous le contenu. */
+.hub-main::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  clip-path: shape(
+    evenodd from 13.55px 0,
+    line to calc(100% - 16px) 0,
+    arc to 100% 16px of 16px cw,
+    line to 100% calc(100% - 16px),
+    arc to calc(100% - 16px) 100% of 16px cw,
+    line to 13.55px 100%,
+    arc to 8.53px calc(100% - 9.27px) of 6px cw,
+    arc to 14.68px calc(100% - 30px) of 38px ccw,
+    line to 14.68px 30px,
+    arc to 8.53px 9.27px of 38px ccw,
+    arc to 13.55px 0 of 6px cw,
+    close,
+    move to 13.55px 1px,
+    line to calc(100% - 16px) 1px,
+    arc to calc(100% - 1px) 16px of 15px cw,
+    line to calc(100% - 1px) calc(100% - 16px),
+    arc to calc(100% - 16px) calc(100% - 1px) of 15px cw,
+    line to 13.55px calc(100% - 1px),
+    arc to 9.36px calc(100% - 8.73px) of 5px cw,
+    arc to 15.68px calc(100% - 30px) of 39px ccw,
+    line to 15.68px 30px,
+    arc to 9.36px 8.73px of 39px ccw,
+    arc to 13.55px 1px of 5px cw
+  );
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* Le papier pointille de la coque.
+ *
+ * Une trame de points, celle d'un carnet a points, imprimee sur la plaque et
+ * eteinte avant la hauteur ou commencent les contenus : un fond qu'on lit
+ * par-dessus doit finir par se taire. Elle est le papier de la coque entiere
+ * — matieres, flashcards, memoire, reglages et tout ce qui s'ouvre depuis
+ * eux. L'espace de travail, lui, n'en a pas : la, le papier est la feuille de
+ * notes elle-meme.
+ *
+ * Elle vit sur la plaque et non sur les pages, pour trois raisons. Les pages
+ * defilent — pose dans l'une d'elles, un calque absolu ne couvrirait qu'une
+ * hauteur d'ecran et s'en irait avec le contenu. Le clip-path de la plaque
+ * decoupe la trame a sa silhouette exacte, encoches comprises. Et une seule
+ * regle habille les sept pages, quelle que soit la classe de leur racine
+ * (.hub-page, .home, .matter, .fc-session).
+ *
+ * Le z-index de −1 la pose sous le contenu mais au-dessus du verre : la
+ * plaque etant un contexte d'empilement, un calque a −1 y reste au-dessus de
+ * .hub::after, qui porte le flou. Peindre les points sur le bureau, derriere
+ * le verre, les effacerait — une trame de 22 px sous un flou de 22 px ne fait
+ * plus des points, elle fait une brume. Peinte avant .hub-main::after, elle
+ * passe sous le lisere.
+ *
+ * L'encre est le laiton des filets, dilue. Un gris froid, sur le creme, ne se
+ * lirait pas comme une trame mais comme une salissure. */
+.hub-main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, var(--brass-line) 1px, transparent 0);
+  background-size: 22px 22px;
+  opacity: 0.55;
+  /* Franc en haut, eteint la ou commencent les contenus. En pixels : la
+     hauteur d'un en-tete ne depend pas de celle de la fenetre. */
+  mask-image: linear-gradient(180deg, #000 0, rgba(0, 0, 0, 0.55) 150px, transparent 320px);
+}
+
+/* Les pages dans la plaque : de simples defilements — le verre est au shell. */
+.hub-page {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-5);
+}
+
+.hub-page-inner {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.hub-page-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 640;
+  letter-spacing: -0.022em;
+  color: var(--shell-text);
+}
+
+.hub-page-lede {
+  margin: calc(-1 * var(--space-4)) 0 0;
+  max-width: 58ch;
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--shell-text-mid);
+}
+
+.hub-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.hub-group-name {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--shell-text-ghost);
+}
+
+.hub-rows {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+}
+
+.hub-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  text-align: left;
+  font-size: 13.5px;
+  color: var(--shell-text-mid);
+  transition: background-color var(--fast) var(--swift);
+}
+
+button.hub-row:hover {
+  background: rgba(0, 0, 0, 0.045);
+  color: var(--shell-text);
+}
+
+.hub-row-format {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  padding: 1.5px 4px;
+  border-radius: 4px;
+  color: var(--shell-text-ghost);
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.hub-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-row-meta {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--shell-text-ghost);
+}
+
+.hub-empty {
+  padding: var(--space-6);
+  border: 1px dashed var(--shell-line-strong);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--shell-text-dim);
+}
+
+/* --- L'ecran Memoire --------------------------------------------------------
+   Des rangees comme partout ailleurs dans la coque ; une rangee ouverte montre
+   le corps de l'entree, son identifiant, et le bouton qui la supprime. */
+
+.memory-detail {
+  margin: 2px var(--space-1) var(--space-2);
+  padding: var(--space-3);
+  background: rgba(0, 0, 0, 0.025);
+  border-radius: var(--radius);
+}
+
+.memory-detail-body {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--shell-text-mid);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.memory-detail-empty {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--shell-text-ghost);
+}
+
+/* Les liens de l'entree, dans un sens puis dans l'autre : une etiquette, puis
+   les titres vises, sur lesquels on clique pour aller les lire. */
+
+.memory-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.memory-links-label {
+  color: var(--shell-text-ghost);
+}
+
+.memory-link {
+  padding: 1px 7px;
+  color: var(--shell-text-dim);
+  border: 1px solid var(--shell-line);
+  border-radius: 999px;
+  transition:
+    color var(--fast) var(--swift),
+    border-color var(--fast) var(--swift);
+}
+
+.memory-link:hover {
+  color: var(--shell-text);
+  border-color: var(--shell-text-ghost);
+}
+
+.memory-detail-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--shell-line);
+}
+
+.memory-detail-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--shell-text-ghost);
+}
+
+.memory-forget {
+  font-size: var(--text-sm);
+  color: var(--shell-text-dim);
+  padding: 3px 8px;
+  border: 1px solid var(--shell-line);
+  border-radius: var(--radius);
+  transition:
+    color var(--fast) var(--swift),
+    border-color var(--fast) var(--swift);
+}
+
+.memory-forget:hover {
+  color: #a03f36;
+  border-color: rgba(160, 63, 54, 0.4);
+}

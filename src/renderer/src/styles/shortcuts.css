@@ -1,0 +1,76 @@
+/* Reprend le voile et l'animation de la bibliotheque : ce sont deux fenetres
+   du meme genre, elles doivent arriver de la meme facon. */
+
+.shortcuts {
+  width: min(560px, 88vw);
+  max-height: 72vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  animation: library-in 150ms var(--ease);
+}
+
+.shortcuts-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--rule);
+}
+
+.shortcuts-title {
+  font-size: var(--text-xs);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.shortcuts-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-4) var(--space-4);
+}
+
+.shortcuts-group + .shortcuts-group {
+  margin-top: var(--space-4);
+}
+
+.shortcuts-group-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--brass-strong);
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: 3px 0;
+}
+
+.shortcuts-keys {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-dim);
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  padding: 2px 6px;
+  flex: none;
+  min-width: 92px;
+  text-align: center;
+}
+
+.shortcuts-label {
+  font-size: var(--text-base);
+  color: var(--text-dim);
+}

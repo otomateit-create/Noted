@@ -1,0 +1,380 @@
+/* Structure generale : barre de titre fixe, espace de travail en dessous. */
+
+.app {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* La coque d'accueil pose ses plaques de verre sur le bureau creme de
+   l'espace de travail : le meme ivoire, d'un bord a l'autre de la fenetre.
+   Les nappes de couleur — laiton, sauge, terre cuite, un bleu discret — sont
+   ce que le verre depolit : sans elles, la transparence et le flou des
+   plaques n'auraient rien a montrer. */
+.app:is(
+    [data-view='dashboard'],
+    [data-view='flashcards'],
+    [data-view='memoire'],
+    [data-view='subject']
+  ) {
+  background:
+    radial-gradient(52% 44% at 10% -4%, rgba(196, 146, 40, 0.26), transparent 70%),
+    radial-gradient(46% 40% at 92% 8%, rgba(46, 139, 87, 0.17), transparent 70%),
+    radial-gradient(52% 48% at 82% 100%, rgba(178, 92, 55, 0.18), transparent 70%),
+    radial-gradient(40% 38% at 4% 96%, rgba(44, 111, 175, 0.13), transparent 70%),
+    var(--paper-deep);
+}
+
+/* Le premier ecran est desormais le tableau de bord : l'image d'attente prend
+   ses neutres, sans quoi un eclair creme precederait chaque lancement. */
+.boot {
+  height: 100%;
+  background: var(--shell-bg);
+}
+
+.workspace {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  /* Le bureau sur lequel les trois cartes sont posees : un ton sous la barre
+     de titre, et un ecart minime tout autour — le meme que celui que les
+     separateurs menagent entre les cartes. */
+  background: var(--paper-deep);
+  padding: var(--space-2);
+}
+
+/* --- Laterale au survol du bord ------------------------------------------
+   Le geste du Dock : une bande invisible colle au bord gauche, et tant que
+   la souris s'y trouve — ou se trouve sur la laterale qu'elle revele, qui la
+   deborde — .workspace-edge-reveal reste survolee, :hover se propageant a
+   tout ancetre d'un descendant survole. Nul besoin d'etat ni de handler. */
+.workspace-edge-reveal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 10px;
+  z-index: 40;
+}
+
+.workspace-edge-sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: var(--hub-gap);
+  transform: translateX(calc(-100% - var(--hub-gap)));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 240ms var(--spring),
+    opacity 160ms var(--swift);
+}
+
+.workspace-edge-reveal:hover .workspace-edge-sidebar {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Posee sur la feuille du cours plutot que sur le bureau creme de la coque :
+   un peu plus de portee lui garde son relief de plaque de verre. */
+.workspace-edge-sidebar .hub-sidebar {
+  box-shadow: var(--glass-shadow-hover);
+}
+
+/* --- Panneaux ------------------------------------------------------------ */
+
+/* Chaque section est une carte : angles adoucis, filet discret, posee sur le
+   bureau. `overflow: hidden` fait suivre la courbe aux contenus carres —
+   bandeaux, barres d'extraction, feuilles du cours. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.panel--course {
+  background: var(--paper-raised);
+  flex: none;
+}
+
+/* Le panneau central est plus clair et plus chaud : c'est la feuille sur
+   laquelle on ecrit, pas un volet parmi trois. */
+.panel--notes {
+  background: var(--paper-sheet);
+  flex: 1;
+}
+
+/* Le fil de discussion se lit comme une page, pas comme une palette d'outils :
+   il prend le meme ivoire que le panneau du cours. Les bulles et la barre de
+   saisie s'y detachent par un ton plus soutenu, l'inverse de l'ancien reglage
+   ou c'etait le fond qui pesait. */
+.panel--chat {
+  background: var(--paper-raised);
+  flex: none;
+}
+
+/* Le bandeau d'un panneau, et la regle qui l'empeche de se piler sur lui-meme.
+ *
+ * Un bandeau ne peut pas retrecir en dessous de ce que ses etiquettes mesurent
+ * — elles sont en `nowrap`, sinon elles tomberaient sur une deuxieme ligne dans
+ * un bandeau de hauteur fixe. Faute d'une regle, le panneau retreci les faisait
+ * simplement se chevaucher : le point de vectorisation par-dessus le numero de
+ * page, « Legende surlignage » coupe en plein mot par le bord du panneau.
+ *
+ * La reponse tient en deux gestes. Rien ne se comprime (`flex: none` sur les
+ * deux groupes), et le bandeau s'interroge lui-meme sur sa largeur — il est son
+ * propre conteneur de requete — pour retirer ses elements par ordre
+ * d'importance quand la place manque. Chaque panneau declare ses seuils a cote
+ * de ses propres boutons, dans son propre fichier : ils dependent de ce que ces
+ * boutons mesurent, pas d'une echelle commune.
+ *
+ * Les regles de seuil sont prefixees par `.panel-head` : sans ce prefixe elles
+ * n'avaient qu'une classe de specificite, a egalite avec le `.icon-button` qui
+ * pose `display` — et c'est l'ordre de chargement des feuilles qui tranchait,
+ * donc rien de fiable.
+ *
+ * `container-type` fait du bandeau un contexte d'empilement. Sans le `z-index`,
+ * la legende du cours et l'historique de l'assistant — qui s'ouvrent sous le
+ * bandeau — passeraient derriere le corps du panneau, qui les suit dans
+ * l'arbre. */
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  height: 38px;
+  padding: 0 var(--space-4);
+  flex: none;
+  border-bottom: 1px solid var(--rule);
+  container-type: inline-size;
+  container-name: bandeau;
+  position: relative;
+  z-index: 5;
+}
+
+/* Etiquette de panneau : petite, espacee, presque effacee. Elle nomme la zone
+   sans jamais entrer en concurrence avec le contenu — et c'est elle qui
+   agrandit le panneau, plutot qu'un bouton de plus dans une barre chargee. */
+.panel-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+  white-space: nowrap;
+  padding: 2px var(--space-1);
+  margin-left: calc(-1 * var(--space-1));
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.panel-label:hover {
+  background: var(--hover);
+  color: var(--text-faint);
+}
+
+.panel-label[data-expanded='true'] {
+  color: var(--brass-strong);
+  background: var(--brass-wash);
+}
+
+/* --- Mode concentration ---------------------------------------------------
+   Les deux autres panneaux se replient par le style, sans etre demontes : un
+   editeur qu'on demonte perd son curseur et son historique d'annulation. */
+
+.workspace[data-focus] > .panel,
+.workspace[data-focus] > .splitter {
+  display: none;
+}
+
+.workspace[data-focus='course'] > .panel--course,
+.workspace[data-focus='notes'] > .panel--notes,
+.workspace[data-focus='chat'] > .panel--chat {
+  display: flex;
+  flex: 1;
+}
+
+/* Le grossissement en cours, et le moyen d'y renoncer. Absent a 100 %, ou il
+   n'aurait rien a dire. */
+.zoom-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--brass-strong);
+}
+
+.panel-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* --- Boutons d'interface ------------------------------------------------- */
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 26px;
+  min-width: 26px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+  /* Un panneau retreci doit serrer les boutons, jamais faire retomber leur
+     etiquette sur une deuxieme ligne : a hauteur fixe, ca deborderait de
+     l'entete plutot que de rester illisible mais contenu. */
+  white-space: nowrap;
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.icon-button:hover {
+  background: var(--hover);
+  color: var(--text-dim);
+}
+
+.icon-button:active {
+  background: var(--rule-strong);
+}
+
+.icon-button[data-active='true'] {
+  color: var(--brass-strong);
+  background: var(--brass-wash);
+}
+
+.icon-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: none;
+}
+
+/* --- Separateurs redimensionnables --------------------------------------- */
+
+/* Le separateur est devenu l'ecart entre deux cartes : invisible au repos —
+   c'est le bureau qui se voit — il reste la poignee qui regle les largeurs. */
+.splitter {
+  flex: none;
+  width: var(--space-2);
+  background: transparent;
+  position: relative;
+  cursor: col-resize;
+  /* Le navigateur ne doit interpreter aucun geste ici : sur un trackpad, un
+     defilement a deux doigts amorce sur le separateur annulait le glissement
+     en cours et le laissait ouvert. */
+  touch-action: none;
+  user-select: none;
+}
+
+/* La zone sensible deborde de l'ecart : viser huit pixels reste penible. */
+.splitter::after {
+  content: '';
+  position: absolute;
+  inset: 0 -3px;
+  z-index: 5;
+}
+
+/* Sous la souris, un trait court se dessine au milieu de l'ecart : la poignee
+   se montre quand on la cherche, jamais avant. */
+.splitter::before {
+  content: '';
+  position: absolute;
+  inset: 12px 2.5px;
+  border-radius: 2px;
+  transition: background-color var(--fast) var(--ease);
+}
+
+.splitter:hover::before,
+.splitter[data-dragging='true']::before {
+  background: var(--rule-strong);
+}
+
+/* --- Creation d'une matiere -----------------------------------------------
+   Present dans la palette de cours comme dans la bibliotheque : le style vit
+   donc ici plutot que dans l'une ou l'autre des deux feuilles. */
+
+.library-import-button--new {
+  /* Le trait discontinu dit « emplacement a remplir » sans avoir besoin de mot. */
+  border-style: dashed;
+  color: var(--text-faint);
+}
+
+.subject-creator {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.subject-creator-input {
+  height: 28px;
+  width: 172px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--brass-line);
+  border-radius: var(--radius-sm);
+  background: var(--paper-overlay);
+  font-size: var(--text-sm);
+  color: var(--text);
+  user-select: text;
+  cursor: text;
+}
+
+.subject-creator-input::placeholder {
+  color: var(--text-ghost);
+}
+
+.subject-creator-error {
+  max-width: 220px;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--hl-incompris);
+}
+
+/* --- Etats vides --------------------------------------------------------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  height: 100%;
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-faint);
+}
+
+.empty-title {
+  font-family: var(--font-read);
+  font-size: var(--text-lg);
+  color: var(--text-dim);
+}
+
+.empty-hint {
+  font-size: var(--text-sm);
+  max-width: 34ch;
+  line-height: 1.6;
+}

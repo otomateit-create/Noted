@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+  <linearGradient id="fond" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#4a4034"/>
+    <stop offset="1" stop-color="#231e19"/>
+  </linearGradient>
+  <filter id="ombre-pastille" x="-15%" y="-15%" width="130%" height="130%">
+    <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#1a1410" flood-opacity="0.3"/>
+  </filter>
+  <filter id="feuille" x="-25%" y="-25%" width="150%" height="150%">
+    <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity="0.42"/>
+  </filter></defs>
+  <g filter="url(#ombre-pastille)">
+    <rect x="100" y="100" width="824" height="824" rx="185.4" fill="url(#fond)"/>
+  </g>
+  <rect x="228" y="300" width="262" height="404" rx="16" fill="#ddd4c4"/>
+  <rect x="534" y="300" width="262" height="404" rx="16" fill="#fffefa"/>
+  <rect x="560" y="418" width="210" height="64" rx="12" fill="#dcac2e"/>
+</svg>

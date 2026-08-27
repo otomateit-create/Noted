@@ -1,0 +1,2199 @@
+/*
+ * Flashcards — les trois ecrans de la section.
+ *
+ * La section parle la langue de la coque : type systeme, surfaces blanches,
+ * filets d'un pixel, profondeur par etagement d'ombres. La couleur n'arrive
+ * que par ce qui en porte deja ailleurs — l'orbe de teinte des matieres, les
+ * pastilles des surlignages d'origine, le laiton pour l'activite de fond.
+ *
+ * La session de revision a droit a plus d'air : une colonne centree, la carte
+ * en grand, le reste s'efface. La carte elle-meme parle la voix de lecture
+ * (serif Charter) : c'est un morceau de cours, pas du chrome.
+ */
+
+/* --- Petites pieces partagees --------------------------------------------- */
+
+/* Retour a l'ecran precedent : discret, il ne concurrence pas le titre. */
+.fc-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  align-self: flex-start;
+  margin: -4px 0 calc(-1 * var(--space-3));
+  padding: 4px 8px 4px 4px;
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--shell-text-dim);
+  transition:
+    color var(--fast) var(--swift),
+    background-color var(--fast) var(--swift);
+}
+
+.fc-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fc-back:hover {
+  color: var(--shell-text);
+  background: rgba(0, 0, 0, 0.045);
+}
+
+/* Le bouton plein : encre sur blanc, la seule masse sombre de la page. */
+.fc-primary {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-family: var(--font-system);
+  font-size: 13.5px;
+  font-weight: 560;
+  letter-spacing: -0.006em;
+  color: #fff;
+  background: var(--shell-text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 1px 2px rgba(15, 17, 22, 0.18),
+    0 4px 10px -4px rgba(15, 17, 22, 0.3);
+  transition:
+    background-color var(--fast) var(--swift),
+    transform var(--fast) var(--spring),
+    box-shadow var(--fast) var(--swift);
+}
+
+.fc-primary:hover {
+  background: #33343c;
+}
+
+.fc-primary:active {
+  transform: scale(0.97);
+}
+
+.fc-primary:disabled {
+  opacity: 0.55;
+  transform: none;
+}
+
+/* Le bouton calme : un filet, pas de masse. */
+.fc-secondary {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-family: var(--font-system);
+  font-size: 13.5px;
+  font-weight: 510;
+  color: var(--shell-text-mid);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  transition:
+    color var(--fast) var(--swift),
+    border-color var(--fast) var(--swift),
+    background-color var(--fast) var(--swift);
+}
+
+.fc-secondary:hover {
+  color: var(--shell-text);
+  border-color: var(--shell-line-strong);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* La pilule « N a revoir » : le meme encre que le bouton plein — un seul
+   signal, repete a l'identique du tableau de bord jusqu'aux rangees. */
+.fc-pill {
+  flex: none;
+  padding: 2.5px 9px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: var(--shell-text);
+}
+
+/* « a jour » : la bonne nouvelle n'a pas besoin de crier. */
+.fc-calm {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--shell-text-ghost);
+}
+
+.fc-chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--shell-text-ghost);
+}
+
+/* Touche de clavier, montree comme une frappe possible, pas un decor. */
+.fc-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--shell-line);
+  background: rgba(0, 0, 0, 0.028);
+  font-family: var(--font-system);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--shell-text-dim);
+}
+
+.fc-back:focus-visible,
+.fc-primary:focus-visible,
+.fc-secondary:focus-visible,
+.fc-subject:focus-visible,
+.fc-set:focus-visible,
+.fc-grade:focus-visible,
+.fc-flip:focus-visible,
+.fc-quit:focus-visible {
+  outline: 2px solid var(--shell-text-ghost);
+  outline-offset: 2px;
+}
+
+/* --- Ecran 1 : le tableau de bord ------------------------------------------ */
+
+/* La grande courbe a gauche, l'objectif et la serie empiles a droite. */
+.fcd-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 292px;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.fcd-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* Les petites capitales d'etiquette, partagees par toutes les cartes. */
+.fcd-caps {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--shell-text-ghost);
+}
+
+.fcd-caps--dark {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* La pastille de tendance : verte quand ca monte, rouge quand ca baisse. */
+.fcd-badge {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fcd-badge--up {
+  color: #2c6e3f;
+  background: rgba(52, 133, 78, 0.12);
+}
+
+.fcd-badge--down {
+  color: #a53a30;
+  background: rgba(177, 58, 48, 0.1);
+}
+
+.fcd-badge--flat {
+  color: var(--shell-text-dim);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* La carte de la courbe. */
+.fcd-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+  min-width: 0;
+}
+
+.fcd-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.fcd-chart-title {
+  margin: 0 0 2px;
+  font-size: 17px;
+  font-weight: 620;
+  letter-spacing: -0.014em;
+  color: var(--shell-text);
+}
+
+.fcd-chart-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.fcd-chart-value-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.fcd-chart-value {
+  font-size: 22px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--shell-text);
+}
+
+.fcd-chart-sub {
+  font-size: var(--text-xs);
+  color: var(--shell-text-dim);
+}
+
+.fcd-plot {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.fcd-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  color: var(--shell-text-ghost);
+}
+
+/* L'objectif de fond : la seule masse sombre de la page, comme fc-primary. */
+.fcd-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-4) var(--space-5);
+  background: var(--shell-text);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 2px 8px rgba(15, 17, 22, 0.18);
+}
+
+.fcd-goal-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 620;
+  letter-spacing: -0.014em;
+  color: #fff;
+}
+
+.fcd-goal-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.fcd-goal-value {
+  font-size: 34px;
+  font-weight: 640;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+
+.fcd-goal-detail {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.fcd-goal-bar {
+  height: 5px;
+  margin-top: var(--space-3);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+.fcd-goal-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #fff;
+}
+
+/* La serie de jours. */
+.fcd-streak {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+}
+
+.fcd-streak-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.fcd-streak-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+.fcd-streak-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.fcd-streak-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  color: var(--shell-text);
+}
+
+.fcd-streak-text {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--shell-text-mid);
+}
+
+.fcd-streak-text strong {
+  font-weight: 640;
+  color: var(--shell-text);
+}
+
+/* Les quatre tuiles chiffrees. */
+.fcd-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.fcd-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+  min-width: 0;
+}
+
+.fcd-kpi-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.fcd-kpi-value {
+  font-size: 25px;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: var(--shell-text);
+}
+
+/* Fenetre etroite : la colonne de droite passe sous la courbe, cote a cote ;
+   les tuiles se rangent deux par deux. */
+@media (max-width: 1080px) {
+  .fcd-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fcd-side {
+    flex-direction: row;
+  }
+
+  .fcd-side > * {
+    flex: 1;
+  }
+
+  .fcd-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .fcd-side {
+    flex-direction: column;
+  }
+}
+
+/* --- Ecran 1 : la generation en tache de fond ------------------------------ */
+
+.fc-genline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: calc(-1 * var(--space-3)) 0 0;
+  font-size: var(--text-sm);
+  color: var(--shell-text-dim);
+}
+
+/* La lampe de laiton : quelque chose travaille. */
+.fc-genline-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--brass);
+  animation: fc-breathe 1.8s var(--swift) infinite alternate;
+}
+
+@keyframes fc-breathe {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- Ecran 1 : les matieres ------------------------------------------------ */
+
+.fc-heading {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--shell-text-ghost);
+}
+
+.fc-subjects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: var(--space-3);
+}
+
+.fc-subject {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 16px;
+  border-radius: 14px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+  text-align: left;
+  transition:
+    transform var(--normal) var(--swift),
+    box-shadow var(--normal) var(--swift),
+    border-color var(--normal) var(--swift);
+}
+
+.fc-subject:hover {
+  transform: translateY(-1px);
+  border-color: var(--shell-line-strong);
+  box-shadow:
+    0 2px 4px rgba(74, 58, 33, 0.06),
+    0 14px 30px -12px rgba(74, 58, 33, 0.2);
+}
+
+.fc-subject:active {
+  transform: translateY(0);
+}
+
+/* L'orbe : la carte de la matiere, vue de tres loin. Meme degrade que sa
+   grande soeur du tableau de bord, meme goutte de lumiere en haut. */
+.fc-orb {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  color: #fff;
+  background: linear-gradient(150deg, var(--tint-from), var(--tint-to));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 2px 6px color-mix(in srgb, var(--tint-to) 35%, transparent);
+}
+
+.fc-orb svg {
+  width: 21px;
+  height: 21px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.18));
+}
+
+.fc-subject-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fc-subject-name {
+  font-size: 15px;
+  font-weight: 590;
+  letter-spacing: -0.01em;
+  color: var(--shell-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-subject-meta {
+  font-size: var(--text-sm);
+  color: var(--shell-text-dim);
+}
+
+/* --- Ecran 1 : l'etat vide ------------------------------------------------- */
+
+.fc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-6);
+  border: 1px dashed var(--shell-line-strong);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.fc-empty-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 590;
+  letter-spacing: -0.01em;
+  color: var(--shell-text);
+}
+
+.fc-empty-text {
+  margin: 0;
+  max-width: 46ch;
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--shell-text-dim);
+}
+
+/* Les trois couleurs qui fabriquent des cartes, montrees telles quelles. */
+.fc-empty-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.fc-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-sm);
+  color: var(--shell-text-mid);
+}
+
+.fc-swatch-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+/* --- Ecran 2 : une matiere ------------------------------------------------- */
+
+.fc-subhead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.fc-subhead .fc-orb {
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+}
+
+.fc-subhead-id {
+  flex: 1;
+  min-width: 0;
+}
+
+.fc-subhead-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 640;
+  letter-spacing: -0.024em;
+  color: var(--shell-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-subhead-meta {
+  margin: 1px 0 0;
+  font-size: var(--text-sm);
+  color: var(--shell-text-dim);
+}
+
+/* Le panneau des sets : une rangee par cours, filets interieurs. */
+.fc-panel {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+}
+
+.fc-set {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 10px;
+  text-align: left;
+  transition: background-color var(--fast) var(--swift);
+}
+
+.fc-set + .fc-set {
+  border-top: 1px solid var(--shell-line);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.fc-set:has(+ .fc-set) {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.fc-set:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+
+.fc-set-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fc-set-name {
+  font-size: 14.5px;
+  letter-spacing: -0.008em;
+  color: var(--shell-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-set-meta {
+  font-size: var(--text-sm);
+  color: var(--shell-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Ecran 3 : la session -------------------------------------------------- */
+
+/* La session remplit la plaque sans defiler : tout tient a l'ecran, c'est la
+   carte qui defile en dernier recours. La lumiere ambiante reprend la teinte
+   de la matiere, en nappes assez diluees pour laisser vivre le verre. */
+.fc-session {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) var(--space-6) var(--space-6);
+  font-family: var(--font-system);
+  background:
+    radial-gradient(
+      640px 340px at 50% -8%,
+      color-mix(in srgb, var(--tint-from) 16%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      560px 420px at 88% 108%,
+      color-mix(in srgb, var(--tint-to) 9%, transparent),
+      transparent 62%
+    );
+}
+
+.fc-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(760px, 100%);
+  margin: 0 auto;
+}
+
+.fc-quit {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--shell-text-dim);
+  transition:
+    color var(--fast) var(--swift),
+    background-color var(--fast) var(--swift);
+}
+
+.fc-quit svg {
+  width: 13px;
+  height: 13px;
+}
+
+.fc-quit:hover {
+  color: var(--shell-text);
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.fc-top-title {
+  font-size: 13px;
+  font-weight: 590;
+  letter-spacing: -0.006em;
+  color: var(--shell-text-mid);
+  max-width: 44ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fc-top-count {
+  justify-self: end;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--shell-text-dim);
+}
+
+.fc-progress {
+  width: min(760px, 100%);
+  margin: var(--space-3) auto 0;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.fc-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--shell-text);
+  transition: width 300ms var(--swift);
+}
+
+/* La scene : la colonne d'etude au centre — et, quand le tuteur est ouvert,
+   son panneau a droite, qui pousse la carte vers la gauche. */
+.fc-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-4) 0 0;
+}
+
+.fc-study {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.fc-ghost {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--shell-text-ghost);
+}
+
+/* D'ou vient la carte : pastille de la couleur d'origine, cours, page. */
+.fc-context {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: min(620px, 100%);
+  font-size: var(--text-sm);
+  color: var(--shell-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.fc-context > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fc-chip {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+/* --- La carte et son retournement ----------------------------------------- */
+
+.fc-scene {
+  position: relative;
+  width: min(620px, 100%);
+  perspective: 1600px;
+}
+
+/* Les deux faces occupent la meme cellule de grille : la carte prend la
+   hauteur de la plus grande, et le retournement n'a rien a mesurer. */
+.fc-card {
+  display: grid;
+  width: 100%;
+  transform-style: preserve-3d;
+}
+
+.fc-card[data-flippable='true'] {
+  cursor: pointer;
+}
+
+.fc-face {
+  grid-area: 1 / 1;
+  display: flex;
+  min-height: 300px;
+  max-height: min(56vh, 540px);
+  border-radius: 18px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  box-shadow:
+    0 1px 1px rgba(20, 30, 50, 0.04),
+    0 6px 16px rgba(20, 30, 50, 0.06),
+    0 22px 48px -8px rgba(20, 30, 50, 0.1);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Le verso attend, deja retourne : il se retrouve a l'endroit quand la carte
+   pivote de 180 degres sur son axe horizontal. */
+.fc-face--back {
+  transform: rotateX(180deg);
+}
+
+/* Centre quand le contenu est court, defile quand il est long. */
+.fc-face-scroll {
+  margin: auto;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 30px 36px;
+}
+
+/* Sur le verso, la question reste en tete, en petit : on verifie ce qu'on
+   vient de se demander sans retourner la carte. */
+.fc-recap {
+  color: var(--shell-text-dim);
+}
+
+.fc-recap .fc-markdown {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: inherit;
+}
+
+.fc-face-rule {
+  height: 1px;
+  margin: 14px 0 16px;
+  background: var(--shell-line);
+}
+
+/* Le contenu d'une carte : la voix de lecture, comme le cours dont il sort. */
+.fc-markdown {
+  font-family: var(--font-read);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.fc-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.fc-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.fc-markdown p {
+  margin: 0 0 0.65em;
+}
+
+.fc-markdown h1,
+.fc-markdown h2,
+.fc-markdown h3,
+.fc-markdown h4 {
+  margin: 1em 0 0.4em;
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+}
+
+.fc-markdown ul,
+.fc-markdown ol {
+  margin: 0 0 0.65em;
+  padding-left: 1.25em;
+}
+
+.fc-markdown li {
+  margin-bottom: 0.25em;
+}
+
+.fc-markdown li::marker {
+  color: var(--text-ghost);
+}
+
+.fc-markdown strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.fc-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.05em 0.3em;
+}
+
+.fc-markdown pre {
+  margin: 0 0 0.65em;
+  padding: var(--space-3);
+  background: var(--paper-deep);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.fc-markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12.5px;
+}
+
+.fc-markdown blockquote {
+  margin: 0 0 0.65em;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--rule-strong);
+  color: var(--text-dim);
+}
+
+/* Meme regime que les tableaux d'une note : des filets horizontaux, rien de
+   plus, et la carte defile de son cote plutot que de s'elargir. */
+.fc-markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  margin: 0 0 0.8em;
+  border-collapse: collapse;
+  font-size: 0.88em;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-markdown th,
+.fc-markdown td {
+  border-bottom: 1px solid var(--rule);
+  padding: 5px 16px 5px 0;
+  vertical-align: top;
+  /* `start`, jamais `left` : l'alignement demande par le Markdown arrive en
+     attribut de presentation, de specificite nulle, et `left` l'annulerait. */
+  text-align: start;
+}
+
+.fc-markdown th[align='center'],
+.fc-markdown td[align='center'] {
+  text-align: center;
+}
+
+.fc-markdown th[align='right'],
+.fc-markdown td[align='right'] {
+  text-align: right;
+}
+
+.fc-markdown th:last-child,
+.fc-markdown td:last-child {
+  padding-right: 0;
+}
+
+.fc-markdown thead th {
+  border-bottom-color: var(--rule-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fc-markdown tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.fc-markdown .katex-display {
+  margin: 0.7em 0;
+  /* Une formule plus large que la carte defile, elle ne deborde pas. */
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+/* --- Les commandes sous la carte ------------------------------------------- */
+
+/* Hauteur reservee : retourner la carte ne fait pas sauter la mise en page. */
+.fc-controls {
+  width: min(620px, 100%);
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+}
+
+.fc-flip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: var(--space-2);
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 510;
+  color: var(--shell-text-mid);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+  transition:
+    color var(--fast) var(--swift),
+    border-color var(--fast) var(--swift),
+    box-shadow var(--fast) var(--swift);
+}
+
+.fc-flip:hover {
+  color: var(--shell-text);
+  border-color: var(--shell-line-strong);
+  box-shadow: 0 2px 6px rgba(15, 17, 22, 0.07);
+}
+
+.fc-grades {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  width: 100%;
+}
+
+.fc-grade {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 8px 8px;
+  border-radius: 12px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+  transition:
+    transform var(--fast) var(--swift),
+    border-color var(--fast) var(--swift),
+    box-shadow var(--fast) var(--swift);
+}
+
+.fc-grade:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--shell-line-strong);
+  box-shadow:
+    0 2px 4px rgba(74, 58, 33, 0.06),
+    0 10px 22px -10px rgba(74, 58, 33, 0.18);
+}
+
+.fc-grade:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.fc-grade:disabled {
+  opacity: 0.55;
+}
+
+.fc-grade-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fc-grade-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  color: var(--shell-text);
+}
+
+/* « Encore » est la seule reponse qui coute : elle seule a droit au rouge. */
+.fc-grade--encore .fc-grade-label {
+  color: var(--shell-danger);
+}
+
+.fc-grade-delay {
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--shell-text-dim);
+}
+
+.fc-save-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--shell-danger);
+}
+
+/* --- Fin de session, file vide --------------------------------------------- */
+
+.fc-final {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.fc-final-glyph {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  border: 1px solid var(--shell-line-strong);
+  color: var(--shell-text);
+  background: var(--shell-surface);
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.05);
+}
+
+.fc-final-glyph svg {
+  width: 20px;
+  height: 20px;
+}
+
+.fc-final-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 640;
+  letter-spacing: -0.022em;
+  color: var(--shell-text);
+}
+
+.fc-final-note {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  max-width: 48ch;
+  font-size: var(--text-base);
+  line-height: 1.55;
+  color: var(--shell-text-dim);
+}
+
+.fc-final-stats {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-5);
+  margin: var(--space-2) 0;
+}
+
+.fc-final-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+}
+
+.fc-final-stat + .fc-final-stat {
+  border-left: 1px solid var(--shell-line);
+  padding-left: var(--space-5);
+}
+
+.fc-final-value {
+  font-size: 34px;
+  font-weight: 640;
+  letter-spacing: -0.026em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: var(--shell-text);
+}
+
+.fc-final-label {
+  font-size: var(--text-xs);
+  color: var(--shell-text-dim);
+}
+
+.fc-final-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* --- Le set general d'une matiere ------------------------------------------ */
+
+/* La rangee du set general : le meme panneau que les sets de cours, avec le
+   petit « + » accole — la porte d'entree de la feuille de collage. */
+.fc-general {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: var(--space-1);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+}
+
+.fc-general-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 11px 12px;
+  border-radius: 10px;
+  text-align: left;
+  transition: background-color var(--fast) var(--swift);
+}
+
+.fc-general-main:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+
+.fc-general-add {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  border-radius: 10px;
+  color: var(--shell-text-dim);
+  transition:
+    color var(--fast) var(--swift),
+    background-color var(--fast) var(--swift);
+}
+
+.fc-general-add:hover {
+  color: var(--shell-text);
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.fc-general-add svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Le bouton « Ajouter » de l'en-tete de matiere : un filet, une icone. */
+.fc-add {
+  gap: 6px;
+}
+
+.fc-add svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fc-general-main:focus-visible,
+.fc-general-add:focus-visible {
+  outline: 2px solid var(--shell-text-ghost);
+  outline-offset: 2px;
+}
+
+/* --- Ecran 4 : la feuille de collage --------------------------------------- */
+
+/* L'en-tete : le titre a gauche, la destination a droite. */
+.fc-compose-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+/* La destination : une etiquette discrete au-dessus d'un selecteur natif. */
+.fc-target {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fc-target-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--shell-text-ghost);
+}
+
+.fc-target-select {
+  max-width: 300px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--shell-line);
+  background: var(--shell-surface);
+  font-family: var(--font-system);
+  font-size: 13px;
+  color: var(--shell-text);
+  transition: border-color var(--fast) var(--swift);
+}
+
+.fc-target-select:hover {
+  border-color: var(--shell-line-strong);
+}
+
+.fc-target-select:focus-visible {
+  outline: 2px solid var(--shell-text-ghost);
+  outline-offset: 2px;
+}
+
+/* Le guide : le standard sous les yeux, copiable tel quel pour une IA. */
+.fc-guide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+}
+
+.fc-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.fc-guide-head .fc-heading {
+  margin: 0;
+}
+
+.fc-guide-copy {
+  gap: 6px;
+  padding: 5px 11px;
+  font-size: 12.5px;
+}
+
+.fc-guide-copy svg {
+  width: 13px;
+  height: 13px;
+}
+
+.fc-guide-pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--shell-text-mid);
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* La feuille : une page blanche en mono, ou l'on colle sans ceremonie. */
+.fc-sheet-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fc-sheet {
+  width: 100%;
+  min-height: 280px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--shell-line);
+  border-radius: 14px;
+  background: var(--shell-surface);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--shell-text);
+  resize: vertical;
+  transition: border-color var(--fast) var(--swift);
+}
+
+.fc-sheet::placeholder {
+  color: var(--shell-text-ghost);
+}
+
+.fc-sheet:focus-visible {
+  outline: none;
+  border-color: var(--shell-line-strong);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+
+/* Le compteur en direct : ce que la feuille donnera, avant de valider. */
+.fc-detect {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.fc-detect-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--shell-text);
+}
+
+.fc-detect-count--zero {
+  font-weight: 500;
+  color: var(--shell-text-ghost);
+}
+
+.fc-detect-target {
+  color: var(--shell-text-dim);
+}
+
+/* Ce que l'analyseur n'a pas compris — jamais perdu en silence. */
+.fc-problems {
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--text-sm);
+  color: #a2652c;
+}
+
+/* L'apercu : les cartes telles qu'elles seront, Markdown et formules rendus. */
+.fc-preview-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.fc-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-3);
+}
+
+.fc-preview-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-4);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+}
+
+.fc-preview-card .fc-markdown {
+  font-size: 13.5px;
+}
+
+.fc-preview-q {
+  font-weight: 560;
+}
+
+.fc-preview-rule {
+  height: 1px;
+  margin: var(--space-2) 0;
+  background: var(--shell-line);
+}
+
+/* Valider, renoncer, et le raccourci qui va plus vite que la souris. */
+.fc-compose-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.fc-compose-error {
+  font-size: var(--text-sm);
+  color: #b13a30;
+}
+
+.fc-compose-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--shell-text-ghost);
+}
+
+@media (max-width: 860px) {
+  .fc-compose-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fc-target-select {
+    max-width: none;
+  }
+}
+
+/* --- Ecran 2 bis : le deck d'un set ---------------------------------------- */
+
+/* La liste des cartes defile dans son propre cadre : les boutons de session
+   restent visibles dessous, meme avec des dizaines de cartes. */
+.fc-deck-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-height: clamp(280px, calc(100vh - 380px), 720px);
+  overflow-y: auto;
+  padding: 2px;
+  margin: -2px;
+}
+
+.fc-deck-empty {
+  margin: 0;
+  padding: var(--space-5);
+  text-align: center;
+  font-size: var(--text-base);
+  color: var(--shell-text-dim);
+  background: var(--shell-surface);
+  border: 1px dashed var(--shell-line);
+  border-radius: 12px;
+}
+
+.fc-deck-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-4);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+}
+
+.fc-deck-card .fc-markdown {
+  font-size: 13.5px;
+}
+
+.fc-deck-card-q {
+  font-weight: 560;
+}
+
+.fc-deck-card-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.fc-deck-card-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--shell-text-dim);
+}
+
+.fc-deck-card-meta-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Les trois points : muets tant que la carte n'est pas survolee. */
+.fc-deck-more {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  margin: -2px -6px -2px 0;
+  border-radius: 7px;
+  color: var(--shell-text-ghost);
+  opacity: 0;
+  transition:
+    opacity var(--fast) var(--swift),
+    color var(--fast) var(--swift),
+    background-color var(--fast) var(--swift);
+}
+
+.fc-deck-card:hover .fc-deck-more,
+.fc-deck-more:focus-visible,
+.fc-deck-more[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.fc-deck-more:hover,
+.fc-deck-more[aria-expanded='true'] {
+  color: var(--shell-text);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.fc-deck-more svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Le voile qui referme le menu au premier clic ailleurs. */
+.fc-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.fc-deck-menu {
+  position: absolute;
+  top: 24px;
+  right: -6px;
+  z-index: 50;
+  min-width: 148px;
+  padding: var(--space-1);
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 10px;
+  box-shadow:
+    0 1px 2px rgba(15, 17, 22, 0.06),
+    0 10px 28px rgba(15, 17, 22, 0.14);
+}
+
+.fc-deck-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--shell-text);
+  text-align: left;
+  transition: background-color var(--fast) var(--swift);
+}
+
+.fc-deck-menu-item svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fc-deck-menu-item:hover {
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.fc-deck-menu-item--danger {
+  color: #b13a30;
+}
+
+.fc-deck-menu-item--danger:hover {
+  background: rgba(177, 58, 48, 0.08);
+}
+
+/* Les trois facons d'ouvrir une session, sous la liste. */
+.fc-modes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+.fc-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 11px 14px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.04);
+  text-align: left;
+  transition:
+    background-color var(--fast) var(--swift),
+    box-shadow var(--fast) var(--swift),
+    transform var(--fast) var(--swift);
+}
+
+.fc-mode:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.025);
+  box-shadow: 0 2px 6px rgba(15, 17, 22, 0.07);
+}
+
+.fc-mode:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.fc-mode:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.fc-mode:focus-visible {
+  outline: 2px solid var(--shell-text);
+  outline-offset: 2px;
+}
+
+.fc-mode-name {
+  font-size: 13.5px;
+  font-weight: 580;
+  letter-spacing: -0.006em;
+  color: var(--shell-text);
+}
+
+.fc-mode-note {
+  font-size: var(--text-xs);
+  color: var(--shell-text-dim);
+}
+
+/* La masse sombre du bouton principal, comme fc-primary. */
+.fc-mode--primary {
+  background: var(--shell-text);
+  border-color: var(--shell-text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 1px 2px rgba(15, 17, 22, 0.18);
+}
+
+.fc-mode--primary:hover:not(:disabled) {
+  background: var(--shell-text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 3px 8px rgba(15, 17, 22, 0.24);
+}
+
+.fc-mode--primary .fc-mode-name {
+  color: #fff;
+}
+
+.fc-mode--primary .fc-mode-note {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+@media (max-width: 860px) {
+  .fc-modes {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Le tuteur d'une carte -------------------------------------------------- */
+
+/* Le petit robot, accroche au bord droit de la carte. */
+.fc-tutor-toggle {
+  position: absolute;
+  top: 50%;
+  right: -56px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.06);
+  color: var(--shell-text-dim);
+  transition:
+    color var(--fast) var(--swift),
+    background-color var(--fast) var(--swift),
+    box-shadow var(--fast) var(--swift);
+}
+
+.fc-tutor-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.fc-tutor-toggle:hover,
+.fc-tutor-toggle[data-active] {
+  color: var(--brass-strong);
+  background: var(--brass-wash);
+  box-shadow: 0 2px 6px rgba(15, 17, 22, 0.1);
+}
+
+.fc-tutor-toggle:focus-visible {
+  outline: 2px solid var(--shell-text);
+  outline-offset: 2px;
+}
+
+/* Le panneau : une colonne de chat, a hauteur de la scene. */
+.fc-tutor {
+  flex: none;
+  width: min(400px, 42%);
+  align-self: stretch;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--shell-surface);
+  border: 1px solid var(--shell-line);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 1px rgba(20, 30, 50, 0.04),
+    0 8px 26px rgba(20, 30, 50, 0.08);
+  overflow: hidden;
+}
+
+.fc-tutor-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--shell-line);
+}
+
+.fc-tutor-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+.fc-tutor-badge svg {
+  width: 15px;
+  height: 15px;
+}
+
+.fc-tutor-title {
+  font-size: 13.5px;
+  font-weight: 590;
+  letter-spacing: -0.006em;
+  color: var(--shell-text);
+}
+
+.fc-tutor-close {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--shell-text-ghost);
+  transition:
+    color var(--fast) var(--swift),
+    background-color var(--fast) var(--swift);
+}
+
+.fc-tutor-close:hover {
+  color: var(--shell-text);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.fc-tutor-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fc-tutor-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* Une question de l'utilisateur : une bulle sobre, a droite. */
+.fc-tutor-user {
+  align-self: flex-end;
+  max-width: 88%;
+  padding: 7px 11px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.055);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--shell-text);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.fc-tutor-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Une etape du tuteur : recherche web, lecture du cours. Une ligne, discrete. */
+.fc-tutor-step {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-xs);
+  color: var(--shell-text-dim);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.fc-tutor-step-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--brass);
+}
+
+.fc-tutor-step[data-running] .fc-tutor-step-dot {
+  animation: fc-breathe 1.4s var(--swift) infinite alternate;
+}
+
+.fc-tutor-text {
+  font-size: 13.5px;
+}
+
+.fc-tutor-wait {
+  font-size: var(--text-sm);
+  color: var(--shell-text-ghost);
+  animation: fc-breathe 1.4s var(--swift) infinite alternate;
+}
+
+.fc-tutor-error {
+  font-size: var(--text-sm);
+  color: #b13a30;
+}
+
+/* La zone d'ecriture, en pied de panneau. */
+.fc-tutor-input {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--shell-line);
+}
+
+.fc-tutor-field {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 8px 11px;
+  border: 1px solid var(--shell-line);
+  border-radius: 11px;
+  background: #fff;
+  font-family: var(--font-system);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--shell-text);
+  max-height: 120px;
+}
+
+.fc-tutor-field:focus {
+  outline: none;
+  border-color: var(--brass-line);
+}
+
+.fc-tutor-send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--shell-text);
+  color: #fff;
+  transition: opacity var(--fast) var(--swift);
+}
+
+.fc-tutor-send:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.fc-tutor-send svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* --- La question de verification ------------------------------------------- */
+
+.fc-quiz {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--shell-line);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.fc-quiz-label {
+  margin: 0;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--brass-strong);
+}
+
+.fc-quiz-question {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 560;
+  line-height: 1.45;
+  color: var(--shell-text);
+}
+
+.fc-quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fc-quiz-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 1px solid var(--shell-line);
+  border-radius: 9px;
+  background: #fff;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--shell-text);
+  transition:
+    border-color var(--fast) var(--swift),
+    background-color var(--fast) var(--swift);
+}
+
+.fc-quiz-option:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.025);
+}
+
+.fc-quiz-option[data-chosen] {
+  border-color: var(--shell-text);
+  background: rgba(15, 17, 22, 0.045);
+}
+
+.fc-quiz-option:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.fc-quiz-letter {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.06);
+  font-size: 11px;
+  font-weight: 620;
+  color: var(--shell-text-mid);
+}
+
+.fc-quiz-option[data-chosen] .fc-quiz-letter {
+  background: var(--shell-text);
+  color: #fff;
+}
+
+.fc-quiz-free {
+  resize: none;
+  padding: 8px 11px;
+  border: 1px solid var(--shell-line);
+  border-radius: 9px;
+  background: #fff;
+  font-family: var(--font-system);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--shell-text);
+}
+
+.fc-quiz-free:focus {
+  outline: none;
+  border-color: var(--brass-line);
+}
+
+.fc-quiz-submit {
+  align-self: flex-start;
+  padding: 6px 13px;
+  font-size: 12.5px;
+}
+
+.fc-quiz-answered {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--shell-text-dim);
+}
+
+/* --- Une carte du deck en cours de modification ---------------------------- */
+
+.fc-deck-card--editing {
+  gap: var(--space-3);
+  border-color: var(--shell-line-strong);
+}
+
+.fc-deck-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fc-deck-edit-label {
+  font-size: var(--text-xs);
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--shell-text-dim);
+}
+
+.fc-deck-edit-area {
+  min-height: 72px;
+  border-radius: 10px;
+}
+
+.fc-deck-edit-hint {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--shell-text-ghost);
+}

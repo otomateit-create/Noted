@@ -1,0 +1,101 @@
+/* Surimpression du glisser-deposer. Elle n'existe que pendant le survol : le
+   reste du temps, aucun element ne se met en travers du travail. */
+
+.drop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(58, 48, 34, 0.3);
+  backdrop-filter: blur(3px);
+  animation: backdrop-in 120ms var(--ease);
+}
+
+/* Une erreur reste lisible apres le depot, sans rideau derriere elle. */
+.drop[data-quiet='true'] {
+  background: none;
+  backdrop-filter: none;
+  align-items: flex-end;
+  padding-bottom: var(--space-6);
+  pointer-events: none;
+}
+
+.drop-panel {
+  width: min(560px, 84vw);
+  padding: var(--space-5);
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  text-align: center;
+}
+
+.drop-title {
+  font-size: var(--text-lg);
+  font-family: var(--font-read);
+  color: var(--text);
+  margin-bottom: var(--space-4);
+}
+
+.drop-targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-2);
+}
+
+.drop-target {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-4) var(--space-3);
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius);
+  transition:
+    border-color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+/* La cible survolee se remplit : on doit savoir ou l'on lache avant de lacher. */
+.drop-target[data-over='true'] {
+  border-color: var(--brass);
+  border-style: solid;
+  background: var(--brass-wash);
+}
+
+.drop-target[data-busy='true'] {
+  opacity: 0.5;
+}
+
+/* Les enfants ne doivent pas intercepter le survol, sinon la cible recoit un
+   dragleave des que le curseur passe sur son propre libelle. */
+.drop-target * {
+  pointer-events: none;
+}
+
+.drop-target-name {
+  font-size: var(--text-base);
+  color: var(--text);
+}
+
+.drop-target-count {
+  font-size: var(--text-xs);
+  color: var(--text-ghost);
+}
+
+.drop-hint {
+  margin-top: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.drop-error {
+  padding: var(--space-3) var(--space-4);
+  background: var(--paper-overlay);
+  border: 1px solid var(--hl-incompris);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
