@@ -139,49 +139,47 @@
 }
 
 /* --- Ou l'on en est dans le defilement -------------------------------------
-   Le rail que la barre du navigateur ne pouvait pas etre ici. Stylee, celle-ci
-   occupe onze pixels de largeur reelle — elle n'est jamais flottante —, et la
-   page ne touchait plus le bord droit du cadre : c'est pour cela qu'elle est
-   masquee plus haut. Celui-ci se pose par-dessus le document, ne prend aucune
-   largeur, et rend ce que la barre disait : ou l'on en est.
+   Reserve aux cours HTML : c'est le seul format qui n'avait rien.
 
-   Il vit dans le panneau et non dans le corps qui defile, sinon il defilerait
-   avec lui. Sa position verticale vient de la mesure, parce que la barre de
-   recherche descend le corps quand elle s'ouvre. */
+   Le panneau du cours cache la barre du navigateur, et pour une raison qui
+   tient toujours : stylee, elle occupe onze pixels de largeur reelle — elle
+   n'est jamais flottante — et la page ne pouvait plus toucher le bord droit du
+   cadre. Celui-ci ne prend rien au cours : il se pose dans la gouttiere qui
+   separe les deux panneaux, la ou il n'y avait que le separateur.
+
+   Il est donc pose sur le bureau et non dans le panneau — un panneau rogne ce
+   qui deborde de lui —, d'ou une position entierement mesuree. */
 .course-scroll {
   position: absolute;
-  right: 2px;
-  width: 10px;
-  z-index: 26;
+  width: var(--space-1);
+  z-index: 30;
   /* Le rail lui-meme ne s'attrape pas : seul le curseur le fait. Sans cela, il
-     ouvrirait une bande morte de dix pixels sur toute la hauteur du cours, ou
-     aucune selection ne pourrait commencer ni finir. */
+     couvrirait le separateur sur toute sa hauteur et l'on ne pourrait plus
+     saisir la poignee qui deplace la largeur des panneaux. */
   pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--normal) var(--ease);
-}
-
-/* Comme les autres barres de l'application : discrete au repos, elle se montre
-   quand la main est sur le panneau. */
-.panel--course:hover .course-scroll {
-  opacity: 1;
+  display: flex;
+  justify-content: center;
 }
 
 .course-scroll-thumb {
   position: absolute;
-  left: 1px;
-  right: 1px;
-  border-radius: 4px;
-  background: var(--scroll-thumb);
+  /* Fine et sombre : dans une gouttiere de quatre pixels, il faut deux pixels
+     francs plutot qu'une bande pale qui se confondrait avec le fond du
+     bureau. */
+  width: 2px;
+  border-radius: 1px;
+  background: var(--text);
   pointer-events: auto;
   cursor: default;
-  transition: background-color var(--fast) var(--ease);
+  transition: opacity var(--fast) var(--ease);
+  opacity: 0.55;
 }
 
 .course-scroll-thumb:hover,
 .course-scroll-thumb:active {
-  background: var(--scroll-thumb-hover);
+  opacity: 1;
 }
+
 
 /* --- Pagination ----------------------------------------------------------- */
 

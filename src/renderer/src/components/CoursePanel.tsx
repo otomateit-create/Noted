@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { HIGHLIGHT_COLORS } from '@shared/types'
@@ -59,9 +60,16 @@ import '../styles/course.css'
  */
 const MIN_THUMB = 28
 
-/** Le rail et son curseur, mesures ensemble : les deux se posent au meme instant. */
+/**
+ * Le rail et son curseur, mesures ensemble : les deux se posent au meme instant.
+ *
+ * Le rail est repere dans le bureau et non dans le panneau, parce qu'il ne vit
+ * pas dans le panneau : il se pose dans la gouttiere qui le separe du panneau
+ * voisin, et un panneau rogne ce qui deborde de lui.
+ */
 interface ScrollbarGeometry {
-  /** Le rail, dans le repere du panneau — il suit le corps, que la barre de recherche descend. */
+  /** La gouttiere, dans le repere du bureau. */
+  trackLeft: number
   trackTop: number
   trackHeight: number
   /** Le curseur, dans le repere du rail. */
@@ -1076,7 +1084,9 @@ export default function CoursePanel({
 
   const measureScrollbar = useCallback(() => {
     const body = bodyRef.current
-    if (!body) return
+    const panel = panelRef.current
+    const desk = panel?.parentElement
+    if (!body || !panel || !desk) return
 
     const travel = body.scrollHeight - body.clientHeight
     // Rien a montrer quand tout tient dans le cadre : un rail plein sur toute
@@ -1093,8 +1103,15 @@ export default function CoursePanel({
     const thumbHeight = Math.max(MIN_THUMB, (body.clientHeight / body.scrollHeight) * track)
     const thumbTop = (body.scrollTop / travel) * (track - thumbHeight)
 
+    const deskBox = desk.getBoundingClientRect()
+    const panelBox = panel.getBoundingClientRect()
+    const bodyBox = body.getBoundingClientRect()
+
     const next = {
-      trackTop: body.offsetTop,
+      // Le bord droit du panneau : le rail commence ou le panneau finit, donc
+      // dans la gouttiere et non dessus.
+      trackLeft: panelBox.right - deskBox.left,
+      trackTop: bodyBox.top - deskBox.top,
       trackHeight: track,
       thumbTop,
       thumbHeight
@@ -1104,6 +1121,7 @@ export default function CoursePanel({
     // pas redessiner les trois panneaux.
     setScrollbar((current) =>
       current &&
+      current.trackLeft === next.trackLeft &&
       current.trackTop === next.trackTop &&
       current.trackHeight === next.trackHeight &&
       current.thumbHeight === next.thumbHeight &&
@@ -1985,23 +2003,34 @@ export default function CoursePanel({
         />
       )}
 
-      {/* Ou l'on en est dans le defilement. Le rail se pose par-dessus le
-          document et non a cote : il ne prend aucune largeur, et la page
-          continue de toucher le bord droit du cadre — ce pour quoi la barre du
-          navigateur avait ete cachee. */}
-      {scrollbar && (
-        <div
-          className="course-scroll"
-          style={{ top: scrollbar.trackTop, height: scrollbar.trackHeight }}
-        >
+      {/* Ou l'on en est dans le defilement, pour un cours HTML — le seul format
+          qui n'avait rien.
+
+          Le rail se pose dans la gouttiere qui separe le panneau de son voisin,
+          et non sur le document : c'est pour cela qu'il passe par un portail
+          vers le bureau. Un panneau rogne ce qui deborde de lui, et le
+          separateur est son frere, pas son enfant. */}
+      {scrollbar &&
+        documentSkin !== null &&
+        panelRef.current?.parentElement &&
+        createPortal(
           <div
-            className="course-scroll-thumb"
-            style={{ top: scrollbar.thumbTop, height: scrollbar.thumbHeight }}
-            onPointerDown={dragScrollbar}
-            role="presentation"
-          />
-        </div>
-      )}
+            className="course-scroll"
+            style={{
+              left: scrollbar.trackLeft,
+              top: scrollbar.trackTop,
+              height: scrollbar.trackHeight
+            }}
+          >
+            <div
+              className="course-scroll-thumb"
+              style={{ top: scrollbar.thumbTop, height: scrollbar.thumbHeight }}
+              onPointerDown={dragScrollbar}
+              role="presentation"
+            />
+          </div>,
+          panelRef.current.parentElement
+        )}
 
       {extraction && (
         <div className="extraction-bar" title="Le texte est transmis à Claude au fur et à mesure">
