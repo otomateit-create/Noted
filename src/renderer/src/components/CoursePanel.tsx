@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { HIGHLIGHT_COLORS } from '@shared/types'
@@ -50,6 +51,23 @@ import {
 import '../styles/anchors.css'
 import '../styles/annotations.css'
 import '../styles/course.css'
+
+/**
+ * En deca de quoi le curseur de defilement cesse d'etre un objet : trop court,
+ * il ne se voit plus et ne s'attrape plus. Un cours de deux cents pages
+ * l'amenerait a trois pixels si on le laissait suivre la proportion visible.
+ */
+const MIN_THUMB = 28
+
+/** Le rail et son curseur, mesures ensemble : les deux se posent au meme instant. */
+interface ScrollbarGeometry {
+  /** Le rail, dans le repere du panneau — il suit le corps, que la barre de recherche descend. */
+  trackTop: number
+  trackHeight: number
+  /** Le curseur, dans le repere du rail. */
+  thumbTop: number
+  thumbHeight: number
+}
 
 /**
  * Emballage du contenu d'un document sans pagination. Word et Markdown n'ont
@@ -242,6 +260,7 @@ export default function CoursePanel({
     null
   )
   const [currentPage, setCurrentPage] = useState(1)
+  const [scrollbar, setScrollbar] = useState<ScrollbarGeometry | null>(null)
   const [extraction, setExtraction] = useState<{ done: number; total: number } | null>(null)
   /** Ou en est la vectorisation du cours, telle que le main la rapporte. */
   const [vectors, setVectors] = useState<VectorStatus | null>(null)
@@ -1042,6 +1061,123 @@ export default function CoursePanel({
       body.removeEventListener('scroll', onScroll)
     }
   }, [measureReading, markDriven, zoom, pageWidth])
+
+  // --- Ou l'on en est dans le defilement -----------------------------------
+  //
+  // Le panneau du cours cache la barre de defilement du navigateur, et pour une
+  // raison qui tient toujours : stylee, elle occupe onze pixels de largeur
+  // reelle — elle n'est jamais flottante —, et la page ne pouvait plus toucher
+  // le bord droit du cadre. Mais la cacher a coute la seule chose qui disait
+  // « tu es ici », et un cours long est alors un cours sans horizon.
+  //
+  // Celle-ci se pose donc par-dessus le document plutot qu'a cote : elle ne
+  // prend aucune largeur, la page touche toujours le bord, et l'on retrouve le
+  // curseur qui descend a mesure qu'on lit.
+
+  const measureScrollbar = useCallback(() => {
+    const body = bodyRef.current
+    if (!body) return
+
+    const travel = body.scrollHeight - body.clientHeight
+    // Rien a montrer quand tout tient dans le cadre : un rail plein sur toute
+    // la hauteur ne dirait rien, et il y a assez de choses a l'ecran.
+    if (travel < 4) {
+      setScrollbar(null)
+      return
+    }
+
+    const track = body.clientHeight
+    // La proportion visible donne la longueur du curseur, mais un cours de
+    // deux cents pages la reduirait a trois pixels : en dessous du plancher, le
+    // curseur cesse d'etre saisissable et de se voir.
+    const thumbHeight = Math.max(MIN_THUMB, (body.clientHeight / body.scrollHeight) * track)
+    const thumbTop = (body.scrollTop / travel) * (track - thumbHeight)
+
+    const next = {
+      trackTop: body.offsetTop,
+      trackHeight: track,
+      thumbTop,
+      thumbHeight
+    }
+
+    // Un cran de molette qui ne deplace pas le curseur d'un demi-pixel ne doit
+    // pas redessiner les trois panneaux.
+    setScrollbar((current) =>
+      current &&
+      current.trackTop === next.trackTop &&
+      current.trackHeight === next.trackHeight &&
+      current.thumbHeight === next.thumbHeight &&
+      Math.abs(current.thumbTop - next.thumbTop) < 0.5
+        ? current
+        : next
+    )
+  }, [])
+
+  useEffect(() => {
+    const body = bodyRef.current
+    if (!body) return
+
+    let frame = 0
+    const schedule = (): void => {
+      if (frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        measureScrollbar()
+      })
+    }
+
+    schedule()
+    body.addEventListener('scroll', schedule, { passive: true })
+    // Le panneau qu'on elargit, le cours qui finit de se peindre, une image qui
+    // arrive : la hauteur bouge sans que personne ne defile.
+    const observer = new ResizeObserver(schedule)
+    observer.observe(body)
+    for (const child of Array.from(body.children)) observer.observe(child)
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      body.removeEventListener('scroll', schedule)
+      observer.disconnect()
+    }
+  }, [measureScrollbar, loadedId, zoom, pageWidth, documentHtml])
+
+  /**
+   * Saisir le curseur pour parcourir le cours.
+   *
+   * Une pilule qu'on ne peut pas attraper serait une demi-barre de defilement :
+   * on la voit descendre, on n'en fait rien. Le rapport est celui du rail au
+   * document — un pixel parcouru ici en vaut autant la-bas.
+   */
+  const dragScrollbar = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const body = bodyRef.current
+      if (!body || !scrollbar) return
+
+      event.preventDefault()
+      const handle = event.currentTarget
+      handle.setPointerCapture(event.pointerId)
+
+      const startY = event.clientY
+      const startTop = body.scrollTop
+      const travel = body.scrollHeight - body.clientHeight
+      const room = scrollbar.trackHeight - scrollbar.thumbHeight
+      if (room <= 0) return
+
+      const move = (moved: PointerEvent): void => {
+        body.scrollTop = startTop + ((moved.clientY - startY) / room) * travel
+      }
+      const stop = (): void => {
+        handle.removeEventListener('pointermove', move)
+        handle.removeEventListener('pointerup', stop)
+        handle.removeEventListener('pointercancel', stop)
+      }
+
+      handle.addEventListener('pointermove', move)
+      handle.addEventListener('pointerup', stop)
+      handle.addEventListener('pointercancel', stop)
+    },
+    [scrollbar]
+  )
 
   useEffect(() => {
     onReading(reading, driven.current === null)
@@ -1849,17 +1985,22 @@ export default function CoursePanel({
         />
       )}
 
-      {/* Ou l'on en est, pour un document sans pages : le pendant exact du
-          numero en filigrane au coin d'une page de PDF. Un cours HTML, un Word,
-          un Markdown n'ont pas de numero a montrer — mais ils ont un titre
-          courant, et c'est la meme chose que dit une page : « voila ou tu en
-          es ». La pastille se tient au coin du panneau et non au coin du
-          contenu, parce que le contenu est ici d'un seul tenant : il n'y a pas
-          de page dont ce serait le coin. */}
-      {!state && reading && (reading.section !== null || reading.progress !== null) && (
-        <span className="course-place" aria-hidden="true">
-          {reading.section ?? `${Math.round((reading.progress ?? 0) * 100)} %`}
-        </span>
+      {/* Ou l'on en est dans le defilement. Le rail se pose par-dessus le
+          document et non a cote : il ne prend aucune largeur, et la page
+          continue de toucher le bord droit du cadre — ce pour quoi la barre du
+          navigateur avait ete cachee. */}
+      {scrollbar && (
+        <div
+          className="course-scroll"
+          style={{ top: scrollbar.trackTop, height: scrollbar.trackHeight }}
+        >
+          <div
+            className="course-scroll-thumb"
+            style={{ top: scrollbar.thumbTop, height: scrollbar.thumbHeight }}
+            onPointerDown={dragScrollbar}
+            role="presentation"
+          />
+        </div>
       )}
 
       {extraction && (

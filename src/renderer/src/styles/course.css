@@ -138,39 +138,49 @@
   opacity: 1;
 }
 
-/* Le meme filigrane, pour un document qui n'a pas de pages a numeroter : il
-   porte alors le titre courant, ou la fraction parcourue quand le document
-   n'a aucun titre. Meme aplat sombre a texte creme, pour la meme raison — il
-   flotte au-dessus d'un contenu dont on ne maitrise pas les couleurs, et un
-   artefact peut poser n'importe quel fond dessous.
+/* --- Ou l'on en est dans le defilement -------------------------------------
+   Le rail que la barre du navigateur ne pouvait pas etre ici. Stylee, celle-ci
+   occupe onze pixels de largeur reelle — elle n'est jamais flottante —, et la
+   page ne touchait plus le bord droit du cadre : c'est pour cela qu'elle est
+   masquee plus haut. Celui-ci se pose par-dessus le document, ne prend aucune
+   largeur, et rend ce que la barre disait : ou l'on en est.
 
-   Il se pose au coin du panneau, la ou celui d'un PDF se pose au coin de sa
-   page : le contenu est ici d'un seul tenant, et c'est le cadre du panneau qui
-   tient lieu de page. */
-.course-place {
+   Il vit dans le panneau et non dans le corps qui defile, sinon il defilerait
+   avec lui. Sa position verticale vient de la mesure, parce que la barre de
+   recherche descend le corps quand elle s'ouvre. */
+.course-scroll {
   position: absolute;
-  z-index: 24;
-  /* Comme le numero de page : invisible hors survol, il ne doit pas ouvrir un
-     rectangle mort ou la selection ne pourrait ni commencer ni finir. */
+  right: 2px;
+  width: 10px;
+  z-index: 26;
+  /* Le rail lui-meme ne s'attrape pas : seul le curseur le fait. Sans cela, il
+     ouvrirait une bande morte de dix pixels sur toute la hauteur du cours, ou
+     aucune selection ne pourrait commencer ni finir. */
   pointer-events: none;
-  right: 10px;
-  bottom: 8px;
-  max-width: min(60%, 320px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: #f4efe4;
-  background: rgba(43, 38, 32, 0.74);
-  padding: 1px 5px;
-  border-radius: 3px;
   opacity: 0;
-  transition: opacity var(--fast) var(--ease);
+  transition: opacity var(--normal) var(--ease);
 }
 
-.panel--course:hover .course-place {
+/* Comme les autres barres de l'application : discrete au repos, elle se montre
+   quand la main est sur le panneau. */
+.panel--course:hover .course-scroll {
   opacity: 1;
+}
+
+.course-scroll-thumb {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  border-radius: 4px;
+  background: var(--scroll-thumb);
+  pointer-events: auto;
+  cursor: default;
+  transition: background-color var(--fast) var(--ease);
+}
+
+.course-scroll-thumb:hover,
+.course-scroll-thumb:active {
+  background: var(--scroll-thumb-hover);
 }
 
 /* --- Pagination ----------------------------------------------------------- */
