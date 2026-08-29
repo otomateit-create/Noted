@@ -2003,15 +2003,14 @@ export default function CoursePanel({
         />
       )}
 
-      {/* Ou l'on en est dans le defilement, pour un cours HTML — le seul format
-          qui n'avait rien.
+      {/* Ou l'on en est dans le defilement — pour tous les formats : aucun ne
+          l'avait, le panneau cachant la barre du navigateur.
 
           Le rail se pose dans la gouttiere qui separe le panneau de son voisin,
           et non sur le document : c'est pour cela qu'il passe par un portail
           vers le bureau. Un panneau rogne ce qui deborde de lui, et le
           separateur est son frere, pas son enfant. */}
       {scrollbar &&
-        documentSkin !== null &&
         panelRef.current?.parentElement &&
         createPortal(
           <div

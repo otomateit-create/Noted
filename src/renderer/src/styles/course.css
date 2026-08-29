@@ -139,7 +139,7 @@
 }
 
 /* --- Ou l'on en est dans le defilement -------------------------------------
-   Reserve aux cours HTML : c'est le seul format qui n'avait rien.
+   Pour tous les formats : aucun ne l'avait.
 
    Le panneau du cours cache la barre du navigateur, et pour une raison qui
    tient toujours : stylee, elle occupe onze pixels de largeur reelle — elle
