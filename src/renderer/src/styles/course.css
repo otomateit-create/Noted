@@ -684,6 +684,68 @@ button.pager-position:hover .pager-current {
   text-align: right;
 }
 
+/* Un cours HTML — un artefact demande a Claude Desktop — arrive avec sa
+   propre mise en page, confinee sous ce conteneur par scope-css.ts. Le
+   conteneur tient lieu de page : fond blanc, police du systeme, et rien
+   d'autre — c'est le cours qui decide.
+
+   La seconde regle rend a chaque element ses valeurs de navigateur : Noted
+   habille `summary`, `button` ou `label` en global, et un artefact compte sur
+   les valeurs par defaut la ou il ne dit rien. `revert` a l'interieur d'un
+   `:where` pese exactement (0,1,0) : plus que les regles globales de
+   l'application, jamais plus que celles du cours une fois prefixees — et a
+   egalite, c'est le cours, place apres, qui l'emporte. Le SVG et MathML en
+   sont exclus : leurs attributs de presentation — `fill`, `r`, `x` — se
+   situent sous les regles d'auteur dans la cascade, et `revert` les effacerait. */
+/*
+ * Le cadre d'un cours HTML : ce qui lui donne la largeur du panneau comme un
+ * navigateur lui donnerait celle de sa fenetre.
+ *
+ * Un artefact sait se replier — sa grille s'empile, ses colonnes se rangent —
+ * mais il le dit en `@media (max-width: ...)`, qui mesure la fenetre de
+ * l'application, large de tout l'ecran, et non le panneau, qui en occupe le
+ * tiers. La regle de repli etait donc ecrite dans la feuille sans jamais se
+ * declencher. `scopeCss` la traduit en requete de conteneur ; c'est ce cadre
+ * qui est le conteneur mesure.
+ *
+ * Il est distinct de `.document-html` parce qu'une requete de conteneur ne peut
+ * pas habiller son propre conteneur — la taille dependrait alors du style
+ * qu'elle decide. Or `.document-html` recoit ce que le document posait sur
+ * `body`, et les artefacts repliant leur page par une regle sur `body` sont
+ * courants : les confondre rendrait ces regles-la sans effet.
+ *
+ * Le zoom vit ici pour une autre raison, mais qui va dans le meme sens : il
+ * divise la largeur que le cadre se voit, si bien qu'agrandir le texte replie
+ * la mise en page — exactement ce que fait un navigateur qu'on retrecit.
+ */
+.document-html-frame {
+  container-type: inline-size;
+  /* Le panneau centre ses enfants sans les etirer : sans largeur demandee, un
+     conteneur — dont la taille ne peut plus venir de son contenu — serait nul. */
+  width: 100%;
+}
+
+.document-html {
+  width: 100%;
+  background: #ffffff;
+  color: #1a1a1a;
+  font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  padding: 8px;
+  cursor: text;
+}
+
+.document-html :where(*:not(svg, svg *, math, math *)) {
+  all: revert;
+}
+
+.document-html :where(img, svg) {
+  max-width: 100%;
+}
+
+.document-html :where(img) {
+  -webkit-user-drag: none;
+}
+
 /* Signale qu'un element de Word n'a pas de traduction exacte a l'ecran, sans
    inquieter : le detail complet est dans l'infobulle. */
 .document-warning {

@@ -1244,6 +1244,16 @@ export function courseConsultTools(sdk: AgentSdk, courseId: string) {
   })
 }
 
+/**
+ * Les definitions brutes des deux outils de consultation — pour la route
+ * Gemini de la generation de flashcards, qui les sert par un vrai serveur MCP
+ * (gemini/mcp.ts) plutot que par le moteur Claude. Memes constructions, memes
+ * handlers : la route change, jamais l'outil.
+ */
+export function consultToolDefinitions(sdk: AgentSdk, courseId: string) {
+  return [buildRechercher(sdk, courseId), buildLire(sdk, courseId)]
+}
+
 /** Noms qualifies des seuls outils de consultation, pour le tuteur. */
 export const CONSULT_TOOL_NAMES = ['mcp__cours__rechercher', 'mcp__cours__lire'] as const
 

@@ -487,18 +487,49 @@ export default function ChatPanel({
     setThread(element)
   }, [])
 
-  // Suivre la reponse pendant qu'elle s'ecrit, sauf si l'utilisateur a
-  // remonte le fil pour relire quelque chose.
-  useEffect(() => {
+  /**
+   * Ce qui identifie le fil affiche : le cours, et le premier message.
+   *
+   * Le cours seul ne suffit pas — reprendre une conversation dans
+   * l'historique, ou repartir a neuf, remplace tout le fil sans changer de
+   * cours. Le premier message, lui, change a chaque fois : une reprise en
+   * apporte un autre, « Nouvelle conversation » n'en laisse aucun. Pendant
+   * qu'une reponse s'ecrit, en revanche, il ne bouge pas — les messages
+   * s'ajoutent a la fin.
+   */
+  const threadKey = `${course?.id ?? ''}|${messages[0]?.id ?? ''}`
+  const lastThread = useRef<string | null>(null)
+
+  /**
+   * Ou se place le fil quand il change.
+   *
+   * Deux situations, et une seule regle ne peut pas servir les deux. Un fil
+   * qu'on vient d'ouvrir — arrivee sur un cours, retour sur un cours deja lu,
+   * reprise d'historique — s'ouvre sur sa fin : c'est le dernier echange qu'on
+   * revient lire, jamais le premier. Sans cela le fil s'ouvrait en haut, et il
+   * fallait le derouler entierement pour retrouver ou on en etait.
+   *
+   * Une reponse qui s'ecrit, elle, respecte la position : si l'utilisateur est
+   * remonte relire un passage, la suivre de force lui arracherait sa lecture.
+   * D'ou le seuil — on ne suit que celui qui etait deja au bas du fil.
+   *
+   * `useLayoutEffect` plutot que `useEffect` : le saut se fait avant que
+   * l'ecran soit peint, sinon on verrait le haut de la conversation une image
+   * durant.
+   */
+  useLayoutEffect(() => {
     const element = scrollRef.current
     if (!element) return
 
+    const ouverture = lastThread.current !== threadKey
+    lastThread.current = threadKey
+
     const distanceFromBottom =
       element.scrollHeight - element.scrollTop - element.clientHeight
-    if (distanceFromBottom < 140) {
+    if (ouverture || distanceFromBottom < 140) {
       element.scrollTop = element.scrollHeight
     }
-  }, [messages])
+  }, [messages, threadKey])
 
   // « default » est l'entree que Claude Code declare lui-meme pour son reglage
   // courant : on la traduit par une absence de choix, plutot que de la

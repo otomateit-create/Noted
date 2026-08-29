@@ -864,27 +864,55 @@
 }
 
 /* --- Cartes mentales --------------------------------------------------------
-   Les rubans de Mermaid montent jusqu'a dix-sept pixels : ils recouvraient les
-   boites qu'ils relient et la carte devenait un noeud de rubans. Une branche
-   se suit tres bien a trois pixels. L'epaisseur decroit avec la profondeur —
-   c'est ce qui fait lire un tronc et ses ramifications plutot qu'un buisson de
-   traits tous egaux. */
-.note-diagram[data-kind='mindmap'] svg path.edge {
-  stroke-width: 1.8px !important;
+   Dessinees par markmap, pas par Mermaid : un arbre qui se lit de gauche a
+   droite, des branches qu'on replie d'un clic sur leur cercle, un zoom et un
+   deplacement quand la carte est selectionnee. La syntaxe stockee reste du
+   Mermaid ; seule la vue change.
+
+   Le cadre a une hauteur fixe, tiree du nombre de lignes que la carte ouvre a
+   l'arrivee : c'est dedans que l'on zoome et que l'on se deplace. markmap
+   ecrit sa propre feuille de style dans le SVG et y lit ces variables. Les
+   epaisseurs de trait, elles, viennent du code (`lineWidth`), qui les fait
+   decroitre avec la profondeur — un tronc et ses ramifications, pas un
+   buisson de traits egaux. */
+.note-diagram svg.note-mindmap,
+.note-proposal-preview [data-type='diagram'] svg.note-mindmap {
+  display: block;
+  width: 100%;
+  height: clamp(220px, calc(var(--mindmap-rows, 8) * 30px), 480px);
+  --markmap-font: 450 13px/1.35 var(--font-ui);
+  --markmap-text-color: var(--text);
+  --markmap-circle-open-bg: var(--paper);
+}
+
+/* L'apercu d'une proposition se juge d'un coup d'oeil : hauteur bornee. */
+.note-proposal-preview [data-type='diagram'] svg.note-mindmap {
+  height: 165px;
+}
+
+/* markmap compte la profondeur a partir de 1 pour le coeur. Celui-ci se
+   distingue par le poids, pas par une forme ; les branches sont un ton plus
+   ferme que les feuilles qu'elles portent. */
+.note-mindmap .markmap-node[data-depth='1'] .markmap-foreign {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.note-mindmap .markmap-node[data-depth='2'] .markmap-foreign {
+  font-weight: 600;
+}
+
+.note-mindmap path.markmap-link {
   stroke-linecap: round;
 }
 
-.note-diagram[data-kind='mindmap'] svg path.edge.edge-depth-1 {
-  stroke-width: 3.2px !important;
+/* Selectionnee, la carte se saisit : c'est le geste du deplacement. */
+.note-mindmap[data-live] {
+  cursor: grab;
 }
 
-.note-diagram[data-kind='mindmap'] svg path.edge.edge-depth-2 {
-  stroke-width: 2.4px !important;
-}
-
-/* Le trait sous un noeud sans cadre : c'est tout ce qu'il a pour se poser. */
-.note-diagram[data-kind='mindmap'] svg .mindmap-node line {
-  stroke-width: 2px !important;
+.note-mindmap[data-live]:active {
+  cursor: grabbing;
 }
 
 /* Un schema dans l'apercu d'une proposition. Il lui faut la meme carte que

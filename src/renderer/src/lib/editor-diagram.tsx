@@ -6,20 +6,28 @@
  * dans Obsidian, qui rend ces blocs nativement. L'editeur, lui, en compose
  * l'image.
  *
- * Le moteur pese deux megaoctets et demi : il n'est charge qu'a la premiere
- * note qui en contient un. Une note sans schema ne le paie jamais.
+ * Deux moteurs la composent. Mermaid dessine les schemas de flux et les
+ * frises ; markmap dessine les cartes mentales — un arbre qui se lit de gauche
+ * a droite, dont on replie les branches et que l'on deplace a la souris. Le
+ * format stocke, lui, reste du Mermaid dans les deux cas.
+ *
+ * Chaque moteur n'est charge qu'a la premiere note qui en a besoin — Mermaid
+ * pese deux megaoctets et demi. Une note sans schema ne paie ni l'un ni l'autre.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react'
 import type { NodeViewProps } from '@tiptap/react'
+import type { IMarkmapOptions, Markmap } from 'markmap-view'
 import { HIGHLIGHT_COLORS } from '@shared/types'
 import {
   addAfter,
   addRoot,
   connect,
   locateParts,
+  mindPaths,
+  mindTree,
   parseDiagram,
   partLabel,
   removePart,
@@ -32,13 +40,16 @@ import type {
   DiagramHandle,
   DiagramModel,
   FlowShape,
-  MindShape,
+  MindModel,
+  MindTree,
   PartKey
 } from './diagram-model'
 
 type Mermaid = typeof import('mermaid').default
+type MarkmapModule = typeof import('markmap-view')
 
 let engine: Promise<Mermaid> | null = null
+let mapEngine: Promise<MarkmapModule> | null = null
 
 /** Lit un jeton de design : le schema doit sortir de la meme palette que le reste. */
 function token(name: string): string {
@@ -313,6 +324,275 @@ export async function validateDiagram(source: string): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
+// Cartes mentales : markmap
+// ---------------------------------------------------------------------------
+
+function loadMapEngine(): Promise<MarkmapModule> {
+  if (!mapEngine) mapEngine = import('markmap-view')
+  return mapEngine
+}
+
+/**
+ * Au-dela de cette taille, une carte arrive repliee : le coeur et ses
+ * branches, le reste au clic. C'est ce qui rend une grande carte lisible —
+ * et ce que le dessin fige ne permettait pas.
+ */
+const FOLD_ABOVE = 18
+
+/**
+ * Les reglages de markmap pour une carte donnee.
+ *
+ * La couleur d'une branche est celle de son ancetre de premier niveau, tiree
+ * des cinq couleurs semantiques deja apprises dans le cours ; le coeur est
+ * laiton. Le trait s'affine en s'eloignant du coeur : c'est ce qui fait lire
+ * un tronc et ses ramifications plutot qu'un buisson de traits egaux. Les
+ * jetons sont lus au moment du rendu, comme pour Mermaid.
+ *
+ * markmap compte la profondeur a partir de 1 pour le coeur, et son chemin
+ * « 1.4.9 » commence par le numero du coeur puis celui de la branche.
+ */
+function mindOptions(model: MindModel): Partial<IMarkmapOptions> {
+  const branch = new Map<string, number>()
+  for (const path of mindPaths(model)) {
+    const ids = path.split('.')
+    if (ids.length === 2) branch.set(ids[1], branch.size)
+  }
+  const brass = token('--brass')
+
+  return {
+    // Les plis sont poses par `foldTree`, jamais par markmap : son reglage
+    // ecraserait ceux que l'utilisateur a deja faits a chaque mise a jour.
+    initialExpandLevel: -1,
+    autoFit: false,
+    duration: 300,
+    paddingX: 10,
+    spacingHorizontal: 64,
+    spacingVertical: 8,
+    maxWidth: 240,
+    fitRatio: 0.92,
+    // Sur Mac, markmap fait defiler la carte a la molette et zoome au
+    // pincement. On prefere la molette pour le zoom — et rien du tout tant
+    // que la carte n'est pas selectionnee, sinon la note ne defile plus des
+    // que le pointeur la survole. C'est la vue qui active le zoom.
+    scrollForPan: false,
+    pan: false,
+    zoom: false,
+    color: (node) => {
+      const ids = node.state.path.split('.')
+      if (ids.length < 2) return brass
+      const rank = branch.get(ids[1]) ?? 0
+      return HIGHLIGHT_COLORS[rank % HIGHLIGHT_COLORS.length].hex
+    },
+    lineWidth: (node) => (node.state.depth <= 2 ? 3.2 : node.state.depth === 3 ? 2.4 : 1.8)
+  }
+}
+
+/**
+ * Ce qu'un noeud replie ou ouvert retient de lui-meme, sous deux cles : la
+ * chaine de ses libelles (« LBO/Dette »), qui survit a une insertion plus haut
+ * dans la carte — les numeros de markmap, eux, se decalent tous —, et son
+ * chemin numerique, qui survit a son propre renommage.
+ */
+type Folds = Map<string, { fold: number; children: number }>
+
+/** Les plis de la carte affichee, avant qu'une mise a jour ne les efface. */
+function rememberFolds(map: Markmap): Folds {
+  const folds: Folds = new Map()
+  const visit = (node: Markmap['state']['data'], parentTrail: string): void => {
+    if (!node) return
+    const trail = `${parentTrail}/${node.content}`
+    if (node.children.length > 0) {
+      const memory = { fold: node.payload?.fold ?? 0, children: node.children.length }
+      folds.set(`trail:${trail}`, memory)
+      folds.set(`path:${node.state.path}`, memory)
+    }
+    for (const child of node.children) visit(child, trail)
+  }
+  visit(map.state.data, '')
+  return folds
+}
+
+/**
+ * Pose les plis sur un arbre neuf.
+ *
+ * `setData` repart de zero : sans cela, renommer un noeud refermerait toute la
+ * carte. Les plis connus sont donc repris — sauf sur un noeud qui vient de
+ * gagner un enfant, qu'on ouvre pour le montrer. Un noeud inconnu suit la
+ * regle d'arrivee : replie a partir de `foldFrom` (le coeur vaut 0). Une
+ * feuille ne se plie jamais : markmap lui peindrait un cercle plein.
+ */
+function foldTree(tree: MindTree, known: Folds, foldFrom: number): void {
+  let id = 0
+  const visit = (node: MindTree, parentPath: string, parentTrail: string, depth: number): void => {
+    id += 1
+    const path = parentPath ? `${parentPath}.${id}` : String(id)
+    const trail = `${parentTrail}/${node.content}`
+
+    if (node.children.length > 0) {
+      const before = known.get(`trail:${trail}`) ?? known.get(`path:${path}`)
+      const fold =
+        before === undefined
+          ? depth >= foldFrom
+            ? 1
+            : 0
+          : before.children < node.children.length
+            ? 0
+            : before.fold
+      node.payload = { fold }
+    }
+    for (const child of node.children) visit(child, path, trail, depth + 1)
+  }
+  visit(tree, '', '', 0)
+}
+
+/** Les plis d'arrivee d'une carte : tout ouvert si elle est petite. */
+function foldFromFor(model: MindModel): number {
+  return model.nodes.length > FOLD_ABOVE ? 1 : Infinity
+}
+
+/** Le nombre de lignes que la carte ouvre a l'arrivee : c'est lui qui fait sa hauteur. */
+function mindRows(model: MindModel): number {
+  if (model.nodes.length <= FOLD_ABOVE) return model.nodes.length
+  return 1 + mindPaths(model).filter((path) => path.split('.').length === 2).length
+}
+
+/**
+ * Dessine une carte mentale dans un conteneur quelconque — l'apercu d'une
+ * proposition de l'assistant, qui n'est pas un noeud de l'editeur. Sans zoom
+ * ni deplacement : on la regarde avant de l'accepter, on ne s'y promene pas.
+ */
+export async function mountMindmap(holder: HTMLElement, source: string): Promise<void> {
+  const model = parseDiagram(source)
+  if (!model || model.kind !== 'mindmap') return
+  const tree = mindTree(model)
+  if (!tree) return
+
+  const { Markmap } = await loadMapEngine()
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('class', 'note-mindmap')
+  svg.style.setProperty('--mindmap-rows', String(mindRows(model)))
+  holder.replaceChildren(svg)
+
+  foldTree(tree, new Map(), foldFromFor(model))
+  const map = Markmap.create(svg, mindOptions(model))
+  await map.setData(tree)
+  await map.fit()
+}
+
+/** Ce que le bloc peut demander a la carte : revenir dans son cadre. */
+interface MindmapApi {
+  fit: () => void
+}
+
+/**
+ * La carte mentale, dessinee par markmap dans un SVG monte une seule fois et
+ * mis a jour sur place. Le remonter a chaque frappe de l'editeur perdrait les
+ * plis et la position — et React 19 reecrit tout innerHTML qu'on lui redonne.
+ *
+ * Le zoom et le deplacement ne s'activent que sur la carte selectionnee : une
+ * carte qui capte la molette au simple survol empeche la note de defiler. Le
+ * pli au clic sur un cercle, lui, marche toujours.
+ */
+function MindmapCanvas({
+  model,
+  selected,
+  api
+}: {
+  model: MindModel
+  selected: boolean
+  api: React.RefObject<MindmapApi | null>
+}): React.JSX.Element {
+  const holder = useRef<SVGSVGElement>(null)
+  const map = useRef<Markmap | null>(null)
+  const [loaded, setLoaded] = useState<MarkmapModule | null>(null)
+
+  useEffect(() => {
+    let live = true
+    void loadMapEngine().then((module) => {
+      if (live) setLoaded(module)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const svg = holder.current
+    if (!loaded || !svg) return undefined
+
+    const created = loaded.Markmap.create(svg, mindOptions(model))
+    map.current = created
+    api.current = { fit: () => void created.fit() }
+
+    // La largeur du panneau change : la carte se recadre.
+    const observer = new ResizeObserver(() => {
+      if (created.state.data) void created.fit()
+    })
+    observer.observe(svg)
+
+    return () => {
+      observer.disconnect()
+      created.destroy()
+      map.current = null
+      api.current = null
+    }
+    // Le modele ne sert qu'a la creation ; ses mises a jour passent par setData.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded])
+
+  useEffect(() => {
+    const current = map.current
+    if (!current) return
+    const tree = mindTree(model)
+    if (!tree) return
+
+    // La premiere fois, les plis d'arrivee ; ensuite, ceux qu'on avait.
+    const first = !current.state.data
+    foldTree(tree, first ? new Map() : rememberFolds(current), first ? foldFromFor(model) : Infinity)
+    void current.setData(tree, mindOptions(model)).then(() => current.fit())
+  }, [loaded, model])
+
+  useEffect(() => {
+    const current = map.current
+    const svg = holder.current
+    if (!current || !svg) return undefined
+
+    current.setOptions({ zoom: selected })
+    svg.toggleAttribute('data-live', selected)
+    if (!selected) return undefined
+
+    // Selectionnee, la carte garde la souris pour elle : sans cela, ProseMirror
+    // prend le glisser pour un deplacement du bloc entier.
+    const keep = (event: Event): void => event.stopPropagation()
+    svg.addEventListener('mousedown', keep)
+
+    // En mode edition, les poignees recouvrent les libelles et recoivent la
+    // molette a la place du SVG : le zoom dependrait alors du pixel sous le
+    // pointeur. On la leur reprend et on la rejoue sur la carte.
+    const stage = svg.parentElement
+    const forward = (event: WheelEvent): void => {
+      if (event.target instanceof Element && svg.contains(event.target)) return
+      event.preventDefault()
+      svg.dispatchEvent(new WheelEvent('wheel', event))
+    }
+    stage?.addEventListener('wheel', forward, { passive: false })
+
+    return () => {
+      svg.removeEventListener('mousedown', keep)
+      stage?.removeEventListener('wheel', forward)
+    }
+  }, [loaded, selected])
+
+  return (
+    <svg
+      ref={holder}
+      className="note-mindmap"
+      style={{ '--mindmap-rows': mindRows(model) } as React.CSSProperties}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Les vignettes des menus de forme
 // ---------------------------------------------------------------------------
 
@@ -351,22 +631,6 @@ function glyphShape(name: string): React.JSX.Element {
           <path d="M3 4.5 V9.5 C3 10.6 5.7 11.5 9 11.5 C12.3 11.5 15 10.6 15 9.5 V4.5" />
           <ellipse cx="9" cy="4.5" rx="6" ry="2" />
         </>
-      )
-
-    // Noeuds d'une carte mentale
-    case 'plain':
-      return <path d="M3 7 H15" />
-    case 'square':
-      return <rect x="1.5" y="3" width="15" height="8" />
-    case 'round':
-      return <rect x="1.5" y="3" width="15" height="8" rx="3" />
-    case 'cloud':
-      return (
-        <path d="M4.5 11 A2.6 2.6 0 0 1 4.8 5.9 A3.2 3.2 0 0 1 10.6 4.2 A2.7 2.7 0 0 1 14.4 6.9 A2.4 2.4 0 0 1 13.6 11 Z" />
-      )
-    case 'bang':
-      return (
-        <path d="M9 1.6 L10.7 4.4 L13.9 3.7 L12.9 6.8 L15.6 8.7 L12.5 9.9 L12.8 13.1 L9.9 11.6 L9 13.4 L8.1 11.6 L5.2 13.1 L5.5 9.9 L2.4 8.7 L5.1 6.8 L4.1 3.7 L7.3 4.4 Z" />
       )
 
     // Traits d'une fleche
@@ -414,17 +678,6 @@ const FLOW_SHAPES: Array<{ shape: FlowShape; label: string }> = [
   { shape: 'hexagon', label: 'Repère' },
   { shape: 'circle', label: 'Jalon' },
   { shape: 'cylinder', label: 'Donnée' }
-]
-
-/** Les formes proposees pour un noeud de carte mentale. */
-const MIND_SHAPES: Array<{ shape: MindShape; label: string }> = [
-  { shape: 'plain', label: 'Sans cadre' },
-  { shape: 'square', label: 'Cadre' },
-  { shape: 'round', label: 'Cadre arrondi' },
-  { shape: 'circle', label: 'Cercle' },
-  { shape: 'hexagon', label: 'Hexagone' },
-  { shape: 'cloud', label: 'Nuage' },
-  { shape: 'bang', label: 'Éclat' }
 ]
 
 /** Les traits proposes pour une fleche de schema de flux. */
@@ -489,10 +742,19 @@ function DiagramView({
   const [handles, setHandles] = useState<DiagramHandle[]>([])
 
   const stage = useRef<HTMLDivElement>(null)
+  const mapApi = useRef<MindmapApi | null>(null)
   const model = useMemo(() => parseDiagram(source), [source])
+  const isMind = model?.kind === 'mindmap'
 
   useEffect(() => {
     let cancelled = false
+
+    // Une carte mentale se dessine par markmap : Mermaid n'a rien a y faire.
+    if (isMind) {
+      setSvg('')
+      setFailure(null)
+      return undefined
+    }
 
     void renderDiagram(source).then(
       (rendered) => {
@@ -510,7 +772,7 @@ function DiagramView({
     return () => {
       cancelled = true
     }
-  }, [source])
+  }, [source, isMind])
 
   /**
    * Ou se trouve chaque element du dessin. Mesure apres coup sur le SVG reel
@@ -540,7 +802,31 @@ function DiagramView({
     // les zones bougent avec lui.
     const observer = new ResizeObserver(() => locate())
     if (stage.current) observer.observe(stage.current)
-    return () => observer.disconnect()
+
+    // Une carte mentale bouge aussi toute seule : un pli retire des noeuds,
+    // un zoom ou un deplacement transforme le groupe racine, et markmap
+    // anime tout cela image par image. On re-mesure au rythme de l'ecran,
+    // pas a chaque mutation.
+    let frame = 0
+    const watcher = new MutationObserver(() => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(locate)
+    })
+    const drawing = stage.current?.querySelector('svg.note-mindmap')
+    if (drawing) {
+      watcher.observe(drawing, {
+        attributes: true,
+        attributeFilter: ['transform'],
+        childList: true,
+        subtree: true
+      })
+    }
+
+    return () => {
+      observer.disconnect()
+      watcher.disconnect()
+      cancelAnimationFrame(frame)
+    }
   }, [mode, svg, locate])
 
   /** Applique un geste : la syntaxe reecrite devient la nouvelle source. */
@@ -597,9 +883,13 @@ function DiagramView({
       contentEditable={false}
     >
       <div className="note-diagram-stage" ref={stage}>
-        {/* Le SVG vient de Mermaid, en mode strict : aucune etiquette n'y
-            entre en HTML, tout y est du texte echappe. */}
-        <div className="note-diagram-canvas" dangerouslySetInnerHTML={{ __html: svg }} />
+        {model?.kind === 'mindmap' ? (
+          <MindmapCanvas model={model} selected={Boolean(selected)} api={mapApi} />
+        ) : (
+          /* Le SVG vient de Mermaid, en mode strict : aucune etiquette n'y
+             entre en HTML, tout y est du texte echappe. */
+          <div className="note-diagram-canvas" dangerouslySetInnerHTML={{ __html: svg }} />
+        )}
 
         {mode === 'edit' && model && (
           <div className="note-diagram-layer">
@@ -668,6 +958,16 @@ function DiagramView({
 
       {mode === 'view' ? (
         <div className="note-diagram-tools">
+          {/* Une carte qu'on a zoomee hors cadre n'a que ce bouton pour revenir. */}
+          {isMind && (
+            <button
+              className="note-diagram-tool"
+              onClick={() => mapApi.current?.fit()}
+              title="Ramener la carte dans son cadre"
+            >
+              Recentrer
+            </button>
+          )}
           <button
             className="note-diagram-tool"
             onClick={() => setMode('edit')}
@@ -692,6 +992,12 @@ function DiagramView({
           {linkFrom && (
             <button className="note-diagram-tool" onClick={() => setLinkFrom(null)}>
               Renoncer
+            </button>
+          )}
+
+          {isMind && (
+            <button className="note-diagram-tool" onClick={() => mapApi.current?.fit()}>
+              Recentrer
             </button>
           )}
 
@@ -748,13 +1054,12 @@ function DiagramPart({
   onCancel: () => void
   onRemove: () => void
   onAdd: () => void
-  onShape: (shape: FlowShape | MindShape) => void
+  onShape: (shape: FlowShape) => void
   onLinkStyle: (link: string) => void
   onLink: () => void
 }): React.JSX.Element {
   const label = partLabel(model, handle.key)
   const isFlowNode = model.kind === 'flowchart' && handle.kind === 'node'
-  const isMindNode = model.kind === 'mindmap' && handle.kind === 'node'
 
   const box = {
     left: handle.x,
@@ -780,16 +1085,15 @@ function DiagramPart({
           onBlur={(event) => onRename(event.target.value)}
         />
 
-        {/* La forme se choisit pendant qu'on nomme : c'est le meme geste. Une
-            carte mentale y a droit comme un schema de flux — ses noeuds ont
-            eux aussi une enveloppe, elle etait seulement hors d'atteinte. */}
-        {(isFlowNode || isMindNode || handle.kind === 'edge') && (
+        {/* La forme se choisit pendant qu'on nomme : c'est le meme geste. Pas
+            pour une carte mentale : markmap dessine tous ses noeuds pareil, et
+            un reglage qui ne change rien a l'ecran serait pire qu'absent. Les
+            formes deja ecrites dans la syntaxe restent lues et reecrites. */}
+        {(isFlowNode || handle.kind === 'edge') && (
           <div className="note-diagram-shapes">
             {(isFlowNode
               ? FLOW_SHAPES.map((entry) => ({ key: entry.shape, label: entry.label }))
-              : isMindNode
-                ? MIND_SHAPES.map((entry) => ({ key: entry.shape, label: entry.label }))
-                : LINK_STYLES.map((entry) => ({ key: entry.link, label: entry.label }))
+              : LINK_STYLES.map((entry) => ({ key: entry.link, label: entry.label }))
             ).map((entry) => (
               <button
                 key={entry.key}
@@ -800,7 +1104,7 @@ function DiagramPart({
                 onMouseDown={(event) => {
                   event.preventDefault()
                   if (handle.kind === 'edge') onLinkStyle(entry.key)
-                  else onShape(entry.key as FlowShape | MindShape)
+                  else onShape(entry.key as FlowShape)
                 }}
               >
                 <Glyph name={entry.key} />

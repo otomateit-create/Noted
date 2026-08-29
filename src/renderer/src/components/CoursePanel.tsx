@@ -30,6 +30,7 @@ import {
   prepareDocumentHtml,
   renderMarkdownCourse
 } from '../lib/document'
+import { HTML_COURSE_SCOPE, htmlCourseToContextText, prepareHtmlCourse } from '../lib/html-course'
 import { withoutFrontMatter } from '../lib/markdown'
 import { elementBox, passageBoxes, type Box } from '../lib/anchors'
 import { headingAbove } from '../lib/find'
@@ -232,6 +233,14 @@ export default function CoursePanel({
     [documentHtml]
   )
   const [warnings, setWarnings] = useState<string[]>([])
+  /**
+   * Ce qu'un cours HTML apporte en plus de son corps : sa feuille de style,
+   * confinee au conteneur, et les classes qu'il posait sur sa page. Null pour
+   * les autres formats — c'est aussi ce qui choisit le conteneur au rendu.
+   */
+  const [documentSkin, setDocumentSkin] = useState<{ css: string; bodyClass: string } | null>(
+    null
+  )
   const [currentPage, setCurrentPage] = useState(1)
   const [extraction, setExtraction] = useState<{ done: number; total: number } | null>(null)
   /** Ou en est la vectorisation du cours, telle que le main la rapporte. */
@@ -380,6 +389,7 @@ export default function CoursePanel({
 
     setState(null)
     setDocumentHtml(null)
+    setDocumentSkin(null)
     setOcrCourse(null)
     setScanned(false)
     setFigureMedia(null)
@@ -512,6 +522,36 @@ export default function CoursePanel({
           }
 
           await transmettre(extractedPptx)
+          return
+        }
+
+        if (courseFormat === 'html') {
+          // Le canal lit un fichier texte, quel qu'il soit : un .html en est un.
+          const raw = await window.noted.course.readMarkdown(courseId)
+          if (cancelled) return
+
+          // Un artefact est une page entiere : son style est confine au
+          // panneau, son corps nettoye de ce qui pourrait agir. Le tout reste
+          // dans le meme DOM que l'application, pour que surlignages, ancres et
+          // ligne de lecture marchent exactement comme sur un Word.
+          const prepared = prepareHtmlCourse(raw)
+
+          if (!cancelled) {
+            setDocumentSkin({ css: prepared.css, bodyClass: prepared.bodyClass })
+            setDocumentHtml(prepared.html)
+            setLoadedId(courseId)
+            setWarnings(prepared.warnings)
+          }
+
+          // Pas de lecture d'images ici : un graphique d'un cours HTML est du
+          // code, et c'est ce code que le texte donne a lire. Un cours tres
+          // visuel, pauvre en texte, n'est donc pas un scan a convertir.
+          const extractedHtml: ExtractedCourse = {
+            ...unpaginated(courseId, htmlCourseToContextText(prepared.html)),
+            looksScanned: false
+          }
+
+          await transmettre(extractedHtml)
           return
         }
 
@@ -654,8 +694,43 @@ export default function CoursePanel({
     const body = bodyRef.current
     if (!body) return []
     if (state) return Array.from(body.querySelectorAll<HTMLElement>('[data-page]'))
-    return htmlRoot ? (Array.from(htmlRoot.children) as HTMLElement[]) : []
-  }, [state, htmlRoot])
+    if (!htmlRoot) return []
+    // Un cours HTML tient souvent tout entier dans un seul conteneur : ses
+    // enfants directs ne feraient qu'un bloc. On descend jusqu'aux blocs de
+    // texte, ou qu'ils soient.
+    if (documentSkin) {
+      return Array.from(
+        htmlRoot.querySelectorAll<HTMLElement>(
+          'h1, h2, h3, h4, h5, h6, p, li, pre, table, figure, blockquote, dt, dd, summary'
+        )
+      )
+    }
+    return Array.from(htmlRoot.children) as HTMLElement[]
+  }, [state, htmlRoot, documentSkin])
+
+  /**
+   * Un lien interne d'un cours HTML — « #covenants » — vise un endroit du
+   * document. Laisse au navigateur, il changerait l'adresse de la page de
+   * l'application ; on amene l'endroit sur la ligne de lecture, comme un renvoi.
+   */
+  const followInternalLink = useCallback(
+    (event: React.MouseEvent) => {
+      const link = (event.target as HTMLElement).closest?.('a[href^="#"]')
+      const body = bodyRef.current
+      if (!link || !body || !htmlRoot) return
+      event.preventDefault()
+
+      const id = decodeURIComponent(link.getAttribute('href')?.slice(1) ?? '')
+      if (!id) return
+      const target =
+        htmlRoot.querySelector<HTMLElement>(`#${CSS.escape(id)}`) ??
+        htmlRoot.querySelector<HTMLElement>(`a[name="${CSS.escape(id)}"]`)
+      if (!target) return
+
+      body.scrollTop += target.getBoundingClientRect().top - readingLineY(body)
+    },
+    [htmlRoot]
+  )
 
   const goToPage = useCallback((page: number) => {
     const body = bodyRef.current
@@ -1678,7 +1753,36 @@ export default function CoursePanel({
           <OriginalView original={ocrCourse.document.original} width={pageWidth} />
         )}
 
-        {documentHtml !== null && ocrView === 'ocr' && (
+        {documentHtml !== null && ocrView === 'ocr' && documentSkin !== null && (
+          /* Un cours HTML se dessine avec son propre style, pas celui du
+             panneau : le conteneur tient lieu de page, et le zoom passe par la
+             propriete CSS du meme nom — un artefact ecrit en pixels ne
+             suivrait pas une taille de police. Le <style> est place a cote du
+             corps et non dedans : la recherche de texte parcourt le corps, et
+             y lirait la feuille de style.
+
+             Le cadre autour porte le zoom et sert de conteneur aux requetes de
+             largeur du document, traduites par `scopeCss` : c'est lui qu'elles
+             mesurent, et il ne peut pas etre l'article, qu'elles habillent. */
+          <div className="document-html-frame" style={{ zoom }}>
+            <article
+              className={`${HTML_COURSE_SCOPE} ${documentSkin.bodyClass}`.trim()}
+              onClick={followInternalLink}
+            >
+              {warnings.length > 0 && (
+                <p className="document-warning" title={warnings.join('\n')}>
+                  {warnings.length === 1
+                    ? 'Un élément du cours a été ignoré — survole pour savoir lequel.'
+                    : `${warnings.length} éléments du cours ont été ignorés — survole pour savoir lesquels.`}
+                </p>
+              )}
+              <style>{documentSkin.css}</style>
+              <div ref={setHtmlRoot} dangerouslySetInnerHTML={documentBody ?? undefined} />
+            </article>
+          </div>
+        )}
+
+        {documentHtml !== null && ocrView === 'ocr' && documentSkin === null && (
           <article className="document-render" style={{ fontSize: `${zoom}em` }}>
             {warnings.length > 0 && (
               <p className="document-warning" title={warnings.join('\n')}>

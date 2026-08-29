@@ -61,6 +61,18 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // Le gardien ci-dessus ne voit que les nouvelles fenetres. Un lien ordinaire
+  // d'un document — un cours HTML en est plein — ferait, lui, naviguer la
+  // fenetre elle-meme : l'application entiere remplacee par la page visee,
+  // sans bouton retour. Seul le rechargement de la page de l'application
+  // (serveur de developpement) reste permis.
+  window.webContents.on('will-navigate', (event, url) => {
+    const current = window.webContents.getURL()
+    if (current && new URL(url).origin === new URL(current).origin) return
+    event.preventDefault()
+    void shell.openExternal(url)
+  })
+
   const devServerUrl = process.env['ELECTRON_RENDERER_URL']
   if (devServerUrl) {
     void window.loadURL(devServerUrl)

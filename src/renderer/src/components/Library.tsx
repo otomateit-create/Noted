@@ -401,7 +401,9 @@ function CourseRow({
               ? 'DOCX'
               : course.format === 'pptx'
                 ? 'PPTX'
-                : 'MD'}
+                : course.format === 'html'
+                  ? 'HTML'
+                  : 'MD'}
         </span>
       </button>
 

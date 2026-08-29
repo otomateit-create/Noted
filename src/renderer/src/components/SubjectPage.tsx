@@ -93,7 +93,7 @@ export default function SubjectPage({
             className="glass-button"
             disabled={importing}
             onClick={() => void importCourses()}
-            title="PDF, Word, PowerPoint, Markdown — ou des photos et captures d’écran, qui deviendront un seul cours"
+            title="PDF, Word, PowerPoint, Markdown, HTML — ou des photos et captures d’écran, qui deviendront un seul cours"
           >
             {importing ? 'Import…' : 'Importer des cours'}
           </button>
@@ -355,5 +355,7 @@ function formatLabel(format: Course['format']): string {
       ? 'DOCX'
       : format === 'pptx'
         ? 'PPTX'
-        : 'MD'
+        : format === 'html'
+          ? 'HTML'
+          : 'MD'
 }

@@ -35,7 +35,11 @@ const COURSE_EXTENSIONS: Record<string, CourseFormat> = {
   '.docx': 'docx',
   '.pptx': 'pptx',
   '.md': 'markdown',
-  '.markdown': 'markdown'
+  '.markdown': 'markdown',
+  // Un cours ecrit en HTML — typiquement un artefact demande a Claude Desktop,
+  // qui n'est rien d'autre qu'une page HTML autonome.
+  '.html': 'html',
+  '.htm': 'html'
 }
 
 export function vaultPaths(): VaultPaths {
@@ -58,7 +62,7 @@ Ce dossier contient tes cours, tes notes et la mémoire de l'IA.
 Tout est en texte brut : tu peux l'ouvrir dans Obsidian, le sauvegarder,
 le versionner, ou le lire dans n'importe quel éditeur.
 
-    Cours/        les documents source (PDF, DOCX, PPTX, Markdown), par matière
+    Cours/        les documents source (PDF, DOCX, PPTX, Markdown, HTML), par matière
     Notes/        tes notes, un fichier .md par cours, même arborescence
     Annotations/  tes surlignages, un fichier .json par cours, même arborescence
     Flashcards/   tes cartes de révision, un fichier .json par cours
@@ -454,7 +458,23 @@ export async function importCourseFile(sourcePath: string, subject: string): Pro
   const destinationDir = path.join(vaultPaths().courses, subject)
   await fs.mkdir(destinationDir, { recursive: true })
 
-  const destination = path.join(destinationDir, path.basename(sourcePath))
+  const fileName = path.basename(sourcePath)
+  const destination = path.join(destinationDir, fileName)
+
+  // Deux cours de meme nom sous deux extensions — « LBO.md » et « LBO.html » —
+  // partageraient la meme note, les memes surlignages, les memes cartes et la
+  // meme memoire : tous ces chemins derivent du nom sans extension. Plutot que
+  // de laisser deux documents ecrire au meme endroit sans que rien ne le dise,
+  // on refuse le second et on explique.
+  const stem = fileName.replace(/\.[^./]+$/, '').toLowerCase()
+  for (const existing of await fs.readdir(destinationDir)) {
+    if (existing === fileName) continue
+    if (existing.replace(/\.[^./]+$/, '').toLowerCase() !== stem) continue
+    if (!COURSE_EXTENSIONS[path.extname(existing).toLowerCase()]) continue
+    throw new Error(
+      `« ${existing} » existe déjà dans ${subject} : deux cours de même nom partageraient la même note. Renomme l'un des deux.`
+    )
+  }
   await fs.copyFile(sourcePath, destination)
   return toCourseId(destination)
 }

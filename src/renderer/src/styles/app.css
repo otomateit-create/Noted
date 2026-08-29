@@ -41,10 +41,12 @@
   min-height: 0;
   overflow: hidden;
   /* Le bureau sur lequel les trois cartes sont posees : un ton sous la barre
-     de titre, et un ecart minime tout autour — le meme que celui que les
-     separateurs menagent entre les cartes. */
+     de titre, et un lisere tout autour — exactement la gouttiere que les
+     separateurs menagent entre les cartes, pour que l'ecart soit le meme
+     partout. Il ne reste que ce qu'il faut pour que les cartes se lisent
+     comme posees sur un fond, et pas comme collees a la fenetre. */
   background: var(--paper-deep);
-  padding: var(--space-2);
+  padding: var(--space-1);
 }
 
 /* --- Laterale au survol du bord ------------------------------------------
@@ -279,7 +281,7 @@
    c'est le bureau qui se voit — il reste la poignee qui regle les largeurs. */
 .splitter {
   flex: none;
-  width: var(--space-2);
+  width: var(--space-1);
   background: transparent;
   position: relative;
   cursor: col-resize;
@@ -294,7 +296,7 @@
 .splitter::after {
   content: '';
   position: absolute;
-  inset: 0 -3px;
+  inset: 0 -4px;
   z-index: 5;
 }
 
@@ -303,7 +305,7 @@
 .splitter::before {
   content: '';
   position: absolute;
-  inset: 12px 2.5px;
+  inset: 12px 1px;
   border-radius: 2px;
   transition: background-color var(--fast) var(--ease);
 }

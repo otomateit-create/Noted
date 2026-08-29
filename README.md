@@ -61,7 +61,7 @@ format propriétaire.
 
 ```
 ~/Documents/Noted/
-├── Cours/            documents source (PDF, Word, Markdown), classés par matière
+├── Cours/            documents source (PDF, Word, PowerPoint, Markdown, HTML), classés par matière
 │   ├── Private Equity/
 │   ├── Corporate Finance/
 │   ├── Investment Banking/

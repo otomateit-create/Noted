@@ -464,9 +464,11 @@ const DIAGRAM_MODELS = [
     source: `mindmap
   root((Sujet))
     Première branche
-      Un détail
+      Un élément
     Deuxième branche
-      Un autre détail`
+      Un élément
+    Troisième branche
+      Un élément`
   },
   {
     label: 'Schéma de flux',

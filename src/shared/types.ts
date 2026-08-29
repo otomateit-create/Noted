@@ -327,7 +327,7 @@ export function sameAnchor(a: NoteAnchor | null, b: NoteAnchor | null): boolean 
 // Vault : cours, notes, memoire
 // ---------------------------------------------------------------------------
 
-export type CourseFormat = 'pdf' | 'docx' | 'pptx' | 'markdown'
+export type CourseFormat = 'pdf' | 'docx' | 'pptx' | 'markdown' | 'html'
 
 /** Un document de cours present dans le vault. */
 export interface Course {

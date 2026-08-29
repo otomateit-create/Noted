@@ -22,11 +22,15 @@
  * s'en sert vraiment — l'assistant du cours et le tuteur. Sans cle, rien ne
  * change : la generation repart sur l'abonnement et sur Haiku.
  *
- * Quand la passerelle est la, la fournee peut etre tentee deux fois : d'abord
- * chez elle, puis sur l'abonnement si elle n'a rien rendu. C'est le dernier
- * cran d'une chaine dont les precedents sont chez OpenRouter (les modeles de
- * la liste, essayes dans l'ordre) — et il ne pouvait pas etre un modele de
- * plus dans cette liste, puisque l'abonnement demande un autre environnement.
+ * Les routes se tentent dans un ordre fixe : Gemini d'abord — le CLI officiel
+ * Antigravity en sous-processus, sur le quota du compte Google (voir gemini/)
+ * —, OpenRouter ensuite, l'abonnement Claude en dernier. Une route qui ne rend
+ * aucune carte passe la main a la suivante : une fournee consommee sans carte
+ * perdrait ses surlignages pour de bon, ils ne sont proposes qu'une fois.
+ * L'abonnement ne pouvait pas etre un modele de plus dans la liste OpenRouter
+ * (il demande un autre environnement) ; Gemini ne parle meme pas le protocole
+ * Anthropic — sa route a son propre moteur, mais sert les memes outils aux
+ * memes handlers, par un serveur MCP ephemere (gemini/mcp.ts).
  *
  * Le passage n'arrive qu'avec un peu de contexte immediat (avant/apres, une
  * quarantaine de caracteres — voir CONTEXT dans lib/annotate.ts, pense pour
@@ -49,10 +53,13 @@
 import { z } from 'zod'
 import { HIGHLIGHT_COLORS } from '../../shared/types'
 import type { PromptAnnexe } from '../../shared/types'
-import { CONSULT_TOOL_NAMES, courseConsultTools } from '../claude/tools'
+import { CONSULT_TOOL_NAMES, consultToolDefinitions, courseConsultTools } from '../claude/tools'
 import { childEnvironment, resolveExecutable } from '../claude/provider'
 import { openRouter } from '../claude/openrouter'
 import { loadSdk } from '../claude/sdk'
+import { geminiRoute } from '../gemini/provider'
+import type { GeminiSetup } from '../gemini/provider'
+import { runGemini } from '../gemini/run'
 import { readExtraction } from '../extraction-cache'
 import { composePrompt } from '../prompts/store'
 import { indexCourse, indexedCourse } from '../rag/store'
@@ -84,6 +91,13 @@ const GENERATION_MODEL = 'haiku'
 
 /** Une generation qui deraille ne doit pas tourner sans fin. */
 const GENERATION_TIMEOUT = 180_000
+
+/**
+ * La route Gemini raisonne longuement et consulte le cours : son plafond est
+ * plus large que celui des routes Claude, sans etre infini — la file de
+ * generation doit toujours finir par se liberer, meme sur un processus muet.
+ */
+const GEMINI_TIMEOUT = 480_000
 
 // ---------------------------------------------------------------------------
 // Etat : les cours en attente, la generation en cours
@@ -189,8 +203,13 @@ function colourMeaning(colourId: string): string {
   return colour ? colour.label : colourId
 }
 
-function cardTools(sdk: AgentSdk, drafts: DraftCard[], validIds: Set<string>) {
-  const creerCarte = sdk.tool(
+/**
+ * L'outil d'ecriture, seul geste de l'agent — extrait de son serveur pour que
+ * la route Gemini serve exactement la meme definition (memes schema et
+ * handler) par son propre serveur MCP.
+ */
+function creerCarteTool(sdk: AgentSdk, drafts: DraftCard[], validIds: Set<string>) {
+  return sdk.tool(
     'creer_carte',
     "Enregistre une flashcard. Donne uniquement le contenu — recto, verso — et l'identifiant du surlignage d'origine : la structure, l'apparence et la planification de revision sont l'affaire de l'application.",
     {
@@ -223,8 +242,14 @@ function cardTools(sdk: AgentSdk, drafts: DraftCard[], validIds: Set<string>) {
       return { content: [{ type: 'text' as const, text: 'Carte enregistree.' }] }
     }
   )
+}
 
-  return sdk.createSdkMcpServer({ name: 'cartes', version: '1.0.0', tools: [creerCarte] })
+function cardTools(sdk: AgentSdk, drafts: DraftCard[], validIds: Set<string>) {
+  return sdk.createSdkMcpServer({
+    name: 'cartes',
+    version: '1.0.0',
+    tools: [creerCarteTool(sdk, drafts, validIds)]
+  })
 }
 
 /**
@@ -457,53 +482,94 @@ async function generateFor(courseId: string): Promise<void> {
     return { drafts, failure }
   }
 
-  /** La route de l'abonnement : celle d'avant OpenRouter, mot pour mot. */
+  /** La route de l'abonnement : celle d'avant les passerelles, mot pour mot. */
   const abonnement: Route = {
     model: GENERATION_MODEL,
     env: childEnvironment(),
     insistant: false
   }
 
-  let { drafts, failure } = await attempt(
-    gateway
-      ? {
+  /**
+   * La tentative Gemini : meme contrat que les autres — ses cartes, son echec
+   * eventuel — mais un autre moteur : le CLI officiel Antigravity (agy) en
+   * sous-processus, nos outils servis par un serveur MCP ephemere
+   * (gemini/run.ts). Les handlers s'executent ici meme, au fil de la session :
+   * une session interrompue a mi-lot garde ses cartes deja creees, exactement
+   * comme sur les routes Claude. La consigne de consultation est la mesuree,
+   * pas l'insistante : le modele demande a cette route raisonne a fond
+   * (suffixe -high) et sait juger quand le passage ne se suffit pas — a
+   * regler a l'usage si les cartes disent le contraire. Pas de plafond de
+   * tours : agy n'en expose pas en headless, c'est sa minuterie qui borne.
+   */
+  const attemptGemini = async (setup: GeminiSetup): Promise<Attempt> => {
+    const drafts: DraftCard[] = []
+    const tools = [
+      creerCarteTool(sdk, drafts, validIds),
+      ...(searchable ? consultToolDefinitions(sdk, courseId) : [])
+    ]
+    const { failure } = await runGemini({
+      executable: setup.executable,
+      model: setup.model,
+      systemPrompt: systemPrompt(rules, searchable, false),
+      prompt,
+      tools,
+      timeout: GEMINI_TIMEOUT
+    })
+    return { drafts, failure }
+  }
+
+  /**
+   * Les routes, dans l'ordre choisi : Gemini (raisonnement approfondi, quota
+   * Google), la passerelle OpenRouter, l'abonnement. Une route qui ne rend
+   * aucune carte passe la main a la suivante — une passerelle rend certaines
+   * de ses erreurs dans le fil (modele sature, quota de la journee epuise)
+   * sans faire echouer la session, qui se dirait complete et consommerait la
+   * fournee sans qu'aucune carte ait ete ecrite. Les surlignages seraient
+   * alors perdus pour de bon, puisqu'ils ne sont proposes qu'une fois.
+   *
+   * Le dernier cran reste l'abonnement : le repli d'OpenRouter s'arrete au
+   * dernier modele de sa liste, celui de Claude Code ne se declenche pas sur
+   * un quota depasse (mesure : un modele rate-limite occupe la minuterie
+   * entiere sans qu'aucun repli parte), et l'abonnement ne peut pas etre un
+   * modele de plus dans ces listes — il demande un autre environnement.
+   */
+  const routes: { nom: string; tenter: () => Promise<Attempt> }[] = []
+  const gemini = await geminiRoute()
+  if (gemini) {
+    routes.push({ nom: `gemini (${gemini.model})`, tenter: () => attemptGemini(gemini) })
+  }
+  if (gateway) {
+    routes.push({
+      nom: gateway.model,
+      tenter: () =>
+        attempt({
           model: gateway.model,
           fallbackModel: gateway.fallbackModel,
           env: gateway.env,
           insistant: true
-        }
-      : abonnement
-  )
+        })
+    })
+  }
+  routes.push({ nom: `abonnement (${GENERATION_MODEL})`, tenter: () => attempt(abonnement) })
 
-  // Une passerelle rend certaines de ses erreurs dans le fil — modele sature,
-  // quota de la journee epuise — sans faire echouer le tour : la session se
-  // dit complete, et la fournee serait consommee sans qu'aucune carte ait ete
-  // ecrite. Les surlignages seraient alors perdus pour de bon, puisqu'ils ne
-  // sont proposes qu'une fois.
-  //
-  // Le repli d'OpenRouter s'arrete au dernier modele de la liste, et celui de
-  // Claude Code ne se declenche pas sur un quota depasse (mesure : un modele
-  // rate-limite occupe la minuterie entiere sans qu'aucun repli parte). Le
-  // dernier cran est donc ici, et il ne peut pas etre un modele de plus dans
-  // la liste : l'abonnement n'est pas au bout de la meme route, il demande
-  // l'autre environnement. On refait la fournee, une seule fois, sur Haiku.
-  if (gateway && drafts.length === 0) {
+  let { drafts, failure } = await routes[0].tenter()
+  for (let index = 1; index < routes.length && drafts.length === 0; index += 1) {
     console.warn(
-      `[flashcards] ${gateway.model} n'a rien rendu pour ${courseId} — reprise sur l'abonnement.`
+      `[flashcards] ${routes[index - 1].nom} n'a rien rendu pour ${courseId} — reprise sur ${routes[index].nom}.`
     )
-    ;({ drafts, failure } = await attempt(abonnement))
+    ;({ drafts, failure } = await routes[index].tenter())
   }
 
   // Session interrompue sans la moindre carte : rien a garder, on laisse le
   // prochain declencheur reprendre tout.
   if (failure && drafts.length === 0) throw failure
 
-  // Meme la reprise sur l'abonnement n'a rien rendu : les deux routes ont
-  // echoue en silence, la fournee n'est pas consommee. Sans passerelle, rien
-  // ne change : une fournee sans carte y reste un jugement de l'agent, et les
-  // surlignages sans contenu testable sont marques traites comme avant.
-  if (gateway && drafts.length === 0) {
-    throw new Error('aucune carte rendue, ni par la passerelle ni par l\'abonnement')
+  // Plusieurs routes ont echoue en silence : la fournee n'est pas consommee.
+  // Quand seul l'abonnement a tourne, rien ne change : une fournee sans carte
+  // y reste un jugement de l'agent, et les surlignages sans contenu testable
+  // sont marques traites comme avant.
+  if (routes.length > 1 && drafts.length === 0) {
+    throw new Error('aucune carte rendue par aucune des routes')
   }
 
   // Session complete : tous les surlignages soumis sont traites, meme ceux

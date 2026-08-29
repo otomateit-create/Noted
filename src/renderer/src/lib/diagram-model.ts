@@ -9,8 +9,10 @@
  * La seconde tient a une regularite de Mermaid, verifiee sur les trois types
  * que l'application propose :
  *
- *   carte mentale   les groupes portent « node_0 », « node_1 »… dans l'ordre
- *                   du parcours en profondeur, celui-la meme de la syntaxe ;
+ *   carte mentale   dessinee par markmap, pas par Mermaid : chaque groupe
+ *                   porte le chemin de son noeud (« 1.3.4 », les identifiants
+ *                   de ses ancetres puis le sien), qu'on recalcule depuis la
+ *                   syntaxe — voir `mindPaths` ;
  *   schema de flux  l'identifiant de la boite est ecrit dans celui du groupe
  *                   (« flowchart-B-1 »), et les fleches sortent dans l'ordre
  *                   ou elles sont declarees ;
@@ -136,6 +138,75 @@ function subtreeEnd(model: MindModel, index: number): number {
   let end = index + 1
   while (end < model.nodes.length && model.nodes[end].depth > depth) end++
   return end
+}
+
+/**
+ * Les profondeurs telles que markmap les verra.
+ *
+ * Notre lecture tolere plusieurs lignes au ras de la marge — Mermaid, lui,
+ * n'accepte qu'un coeur, et markmap non plus. La premiere fait donc le coeur,
+ * les suivantes deviennent ses branches, et tout ce qui les suit descend d'un
+ * cran avec elles.
+ */
+function mindDepths(model: MindModel): number[] {
+  let shift = 0
+  return model.nodes.map((node, index) => {
+    if (index > 0 && node.depth === 0) shift = 1
+    return node.depth + shift
+  })
+}
+
+/**
+ * Le chemin que markmap donne a chaque noeud, dans l'ordre du modele.
+ *
+ * markmap numerote les noeuds d'un compteur en parcours en profondeur, a partir
+ * de 1 — l'ordre meme de la syntaxe — et ecrit dans « data-path » les numeros
+ * des ancetres puis le sien, joints par un point : « 1.3.4 ». On le recalcule
+ * ici plutot que de lire les groupes dans l'ordre du document : un noeud replie
+ * n'y est plus, et tout ce qui le suivrait serait decale d'autant.
+ */
+export function mindPaths(model: MindModel): string[] {
+  const depths = mindDepths(model)
+  const trail: number[] = []
+
+  return model.nodes.map((_, index) => {
+    trail.length = depths[index]
+    trail.push(index + 1)
+    return trail.join('.')
+  })
+}
+
+/** Un noeud de l'arbre que markmap dessine. `content` est du HTML. */
+export interface MindTree {
+  content: string
+  children: MindTree[]
+  payload?: { fold?: number }
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+/**
+ * L'arbre de markmap, bati depuis la liste plate du modele. Les libelles y
+ * passent echappes : markmap les injecte en HTML, et un libelle vient de
+ * l'assistant ou de la syntaxe tapee, jamais d'un endroit de confiance.
+ */
+export function mindTree(model: MindModel): MindTree | null {
+  const depths = mindDepths(model)
+  const trail: MindTree[] = []
+  let root: MindTree | null = null
+
+  for (let index = 0; index < model.nodes.length; index++) {
+    const leaf: MindTree = { content: escapeHtml(model.nodes[index].label), children: [] }
+    trail.length = depths[index]
+    const parent = trail[trail.length - 1]
+    if (parent) parent.children.push(leaf)
+    else root = leaf
+    trail.push(leaf)
+  }
+
+  return root
 }
 
 // ---------------------------------------------------------------------------
@@ -763,15 +834,20 @@ export function locateParts(
   }
 
   if (model.kind === 'mindmap') {
-    // « node_N » porte le rang du noeud dans le parcours en profondeur, qui
-    // est aussi son rang dans la syntaxe.
-    for (const group of Array.from(svg.querySelectorAll('g.mindmap-node'))) {
-      const rank = /node_(\d+)$/.exec(group.id)
-      if (!rank) continue
+    // Chaque groupe porte le chemin de son noeud ; on le recalcule depuis la
+    // syntaxe et on apparie par lui, jamais par l'ordre du document — un
+    // noeud replie n'y figure plus. Il n'a pas de poignee : on ne renomme pas
+    // ce qu'on ne voit pas.
+    const rank = new Map(mindPaths(model).map((path, index) => [path, index]))
 
-      const index = Number(rank[1])
-      if (!model.nodes[index]) continue
-      push(group, `node:${index}`, 'node', { removable: index > 0, extendable: true })
+    for (const group of Array.from(svg.querySelectorAll('g.markmap-node'))) {
+      const index = rank.get(group.getAttribute('data-path') ?? '')
+      if (index === undefined) continue
+
+      // Le libelle seul, pas le groupe : celui-ci englobe le cercle du pli,
+      // que la poignee recouvrirait.
+      const label = group.querySelector('foreignObject') ?? group
+      push(label, `node:${index}`, 'node', { removable: index > 0, extendable: true })
     }
     return handles
   }

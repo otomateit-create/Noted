@@ -98,7 +98,7 @@ export default function DropZone({ subjects, onImported }: DropZoneProps): React
         const { imported, photos } = await window.noted.vault.importPaths(paths, subject)
         if (imported.length === 0 && !photos) {
           setError(
-            'Aucun de ces fichiers n’est un cours (PDF, Word, PowerPoint, Markdown, ou des images).'
+            'Aucun de ces fichiers n’est un cours (PDF, Word, PowerPoint, Markdown, HTML, ou des images).'
           )
           return
         }
@@ -181,7 +181,7 @@ export default function DropZone({ subjects, onImported }: DropZoneProps): React
           )}
 
           <p className="drop-hint">
-            PDF, Word, PowerPoint, Markdown — ou des images, qui deviendront un seul cours.
+            PDF, Word, PowerPoint, Markdown, HTML — ou des images, qui deviendront un seul cours.
             Lâche à côté pour annuler.
           </p>
         </div>

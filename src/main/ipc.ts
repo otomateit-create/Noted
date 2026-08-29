@@ -109,7 +109,7 @@ export const FEUX_PILULE = { x: FEUX_REPOS.x + 8, y: FEUX_REPOS.y + 8 } as const
 const EFFORTS: ChatEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
 /** Formats qui deviennent un cours par simple copie, sans etre lus. */
-const IMPORTABLE = new Set(['.pdf', '.docx', '.pptx', '.md', '.markdown'])
+const IMPORTABLE = new Set(['.pdf', '.docx', '.pptx', '.md', '.markdown', '.html', '.htm'])
 
 /**
  * Tout ce que le selecteur laisse choisir, sans l'extension du point.
@@ -204,7 +204,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const result = await dialog.showOpenDialog(window, {
       title: `Ajouter des cours dans ${target}`,
       message:
-        'PDF, Word, PowerPoint, Markdown — ou des photos et captures d’écran, qui deviendront un seul cours.',
+        'PDF, Word, PowerPoint, Markdown, HTML — ou des photos et captures d’écran, qui deviendront un seul cours.',
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'Cours, photos et captures d’écran', extensions: CHOOSABLE }]
     })

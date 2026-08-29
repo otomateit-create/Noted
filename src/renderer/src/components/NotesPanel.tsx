@@ -25,7 +25,7 @@ import PanelLabel from './PanelLabel'
 import { ANCHORED, AnchorAttribute, effectiveAnchor } from '../lib/editor-anchor'
 import { Callout } from '../lib/editor-callout'
 import { StyledTable } from '../lib/editor-table'
-import { Diagram, renderDiagram, validateDiagram } from '../lib/editor-diagram'
+import { Diagram, mountMindmap, renderDiagram, validateDiagram } from '../lib/editor-diagram'
 import { mathExtensions } from '../lib/editor-math'
 import { FontSize } from '../lib/editor-font-size'
 import {
@@ -1834,8 +1834,15 @@ function ProposalCard({
     if (!root) return undefined
     let cancelled = false
 
-    for (const holder of Array.from(root.querySelectorAll('[data-type="diagram"]'))) {
+    for (const holder of Array.from(root.querySelectorAll<HTMLElement>('[data-type="diagram"]'))) {
       const source = holder.getAttribute('data-source') ?? ''
+
+      // Une carte mentale se dessine par markmap, monte dans le conteneur.
+      if (/^\s*mindmap\b/.test(source)) {
+        void mountMindmap(holder, source).catch(() => undefined)
+        continue
+      }
+
       void renderDiagram(source).then(
         (svg) => {
           if (!cancelled) holder.innerHTML = svg
