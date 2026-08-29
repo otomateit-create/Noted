@@ -1849,6 +1849,19 @@ export default function CoursePanel({
         />
       )}
 
+      {/* Ou l'on en est, pour un document sans pages : le pendant exact du
+          numero en filigrane au coin d'une page de PDF. Un cours HTML, un Word,
+          un Markdown n'ont pas de numero a montrer — mais ils ont un titre
+          courant, et c'est la meme chose que dit une page : « voila ou tu en
+          es ». La pastille se tient au coin du panneau et non au coin du
+          contenu, parce que le contenu est ici d'un seul tenant : il n'y a pas
+          de page dont ce serait le coin. */}
+      {!state && reading && (reading.section !== null || reading.progress !== null) && (
+        <span className="course-place" aria-hidden="true">
+          {reading.section ?? `${Math.round((reading.progress ?? 0) * 100)} %`}
+        </span>
+      )}
+
       {extraction && (
         <div className="extraction-bar" title="Le texte est transmis à Claude au fur et à mesure">
           <div

@@ -138,6 +138,41 @@
   opacity: 1;
 }
 
+/* Le meme filigrane, pour un document qui n'a pas de pages a numeroter : il
+   porte alors le titre courant, ou la fraction parcourue quand le document
+   n'a aucun titre. Meme aplat sombre a texte creme, pour la meme raison — il
+   flotte au-dessus d'un contenu dont on ne maitrise pas les couleurs, et un
+   artefact peut poser n'importe quel fond dessous.
+
+   Il se pose au coin du panneau, la ou celui d'un PDF se pose au coin de sa
+   page : le contenu est ici d'un seul tenant, et c'est le cadre du panneau qui
+   tient lieu de page. */
+.course-place {
+  position: absolute;
+  z-index: 24;
+  /* Comme le numero de page : invisible hors survol, il ne doit pas ouvrir un
+     rectangle mort ou la selection ne pourrait ni commencer ni finir. */
+  pointer-events: none;
+  right: 10px;
+  bottom: 8px;
+  max-width: min(60%, 320px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #f4efe4;
+  background: rgba(43, 38, 32, 0.74);
+  padding: 1px 5px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+
+.panel--course:hover .course-place {
+  opacity: 1;
+}
+
 /* --- Pagination ----------------------------------------------------------- */
 
 .pager {
