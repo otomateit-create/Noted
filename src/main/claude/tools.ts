@@ -49,6 +49,8 @@ import { listNoteObjects, uniqueTarget } from '../note-objects'
 import type { NoteObject } from '../note-objects'
 import { readNote } from '../notes'
 import { proposeNoteChange, readLiveNote } from '../notes-bridge'
+import { appendDraft, readDraft } from '../notes-draft'
+import { postDraft } from '../notes-post'
 import { askQuiz } from '../quiz-bridge'
 import {
   ANCHOR_LINES,
@@ -66,7 +68,7 @@ import {
   widenToUnique
 } from '../notes-view'
 import type { NoteView, RawSpan } from '../notes-view'
-import { resolveAnchorSequence, unitKeysForAnchors } from '../rag/auto-anchor'
+import { declaredScope, resolveAnchorSequence, unitKeysForAnchors } from '../rag/auto-anchor'
 import type { AnchorSlot } from '../rag/auto-anchor'
 import type { Chunk } from '../rag/chunk'
 import { embed } from '../rag/embedder'
@@ -303,7 +305,7 @@ async function anchorInsertedBlocks(
 /**
  * Une reponse de l'assistant recopiee dans la note par le lecteur (« Inserer
  * dans mes notes ») : memes ancres que pour un ajout de l'assistant par
- * « note_inserer ». Les pages que la reponse cite tiennent le role des
+ * « note_brouillon ». Les pages que la reponse cite tiennent le role des
  * passages consultes dans le tour — c'est de celles-la qu'elle parle en
  * premier. La place, elle, se decide au tri de la note, cote panneau.
  */
@@ -663,7 +665,7 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
 
       if (!markdown.trim()) {
         return say(
-          "La note de ce cours est encore vide. Tu peux proposer d'y écrire avec note_inserer si l'utilisateur le demande."
+          "La note de ce cours est encore vide. Tu peux y écrire avec note_brouillon puis note_poser si l'utilisateur le demande."
         )
       }
 
@@ -694,95 +696,104 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
     READ_ONLY
   )
 
-  const noteInserer = sdk.tool(
-    'note_inserer',
-    "Propose d'ajouter du contenu aux notes du cours ouvert — a sa place dans l'ordre du cours (defaut), en fin de note, au curseur, ou apres un passage precis. C'est le bon geste pour completer une note existante : le reste de la note n'est pas touche. L'application rattache elle-meme chaque bloc de cet ajout au passage du cours dont il parle, en cherchant d'abord parmi les pages et sections que tu viens de consulter dans ce tour : lis avant d'ecrire, les reperes n'en seront que plus justes. L'utilisateur voit un apercu dans son panneau de notes et decide ; l'appel attend sa decision et te la rapporte.",
+  const noteBrouillon = sdk.tool(
+    'note_brouillon',
+    "Depose des passages dans le brouillon de notes du cours ouvert. C'est le seul moyen d'ajouter du contenu aux notes : tu ecris ici, l'application ancre et insere. Chaque passage doit dire, dans « source », la page ou la section du cours sur laquelle il s'appuie — c'est cette declaration, et non une devinette de l'application, qui place la note en face du bon endroit du cours. Un passage regroupe tout ce qui parle du meme endroit : plusieurs paragraphes, un titre et sa liste, un tableau ; ce qui parle d'ailleurs fait un passage separe. Appelle-le autant de fois que tu veux dans un tour — les passages s'accumulent —, puis « note_poser » quand tu as fini. Rien n'atteint la note avant.",
     {
-      contenu: z
-        .string()
-        .describe(
-          'Le contenu a ajouter, en Markdown — memes conventions que dans le prompt systeme (formules $…$, surlignages ==texte=={couleur}).'
-        ),
-      apres: z
-        .string()
-        .optional()
-        .describe(
-          "Le passage exact apres lequel inserer, recopie depuis note_lire, Markdown compris — pour ajouter au milieu de la note. Il doit apparaitre une seule fois : elargis-le s'il est ambigu. Prime sur « position »."
-        ),
-      position: z
-        .enum(['fin', 'curseur'])
-        .optional()
-        .describe(
-          "Sans ce parametre, l'ajout se place tout seul dans l'ordre du cours, entre les notes qui precedent et suivent le passage dont il parle. « fin » force la fin de note — uniquement si l'utilisateur le demande ; « curseur » insere la ou il a son curseur — uniquement s'il l'a demande (« ici », « la ou j'en suis »)."
+      passages: z
+        .array(
+          z.object({
+            source: z
+              .string()
+              .min(1)
+              .describe(
+                "L'endroit du cours sur lequel ce passage s'appuie, ecrit comme « rechercher » et « lire » te le rendent : « p. 54 » ou « p. 60-61 » pour un document pagine, le titre exact de la section pour un document a titres. Obligatoire, meme quand le passage apporte une information que le cours n'a pas : la source dit ou la note s'accroche dans le cours, pas d'ou elle est tiree. Lis avant d'ecrire — c'est ce qui rend le reperage juste."
+              ),
+            contenu: z
+              .string()
+              .min(1)
+              .describe(
+                "Le texte du passage, en Markdown — memes conventions que dans le prompt systeme (formules $…$, surlignages ==texte=={couleur}). Tout ce qui est ici partagera une seule ancre : n'y mets que ce qui parle de la meme source."
+              )
+          })
         )
+        .min(1)
+        .describe('Les passages a ajouter au brouillon, dans l\'ordre ou tu les ecris.')
     },
-    async ({ contenu, apres, position }) => {
-      if (!contenu.trim()) return say('Contenu vide : rien à proposer.')
-
+    async ({ passages }) => {
       /**
-       * Les ancres se posent ici, dans le tour d'outil, et non apres coup
-       * comme pour un bloc tape a la main. La difference n'est pas un choix de
-       * commodite : un bloc tape n'a de texte definitif qu'apres un silence au
-       * clavier, d'ou l'attente et l'aller-retour par le renderer, tandis que
-       * ce contenu est complet a la milliseconde ou l'outil est appele. Il n'y
-       * a donc rien a attendre, aucun bloc a retrouver plus tard, et les
-       * marqueurs peuvent simplement partir avec le texte qu'ils decrivent —
-       * un par bloc qui change d'endroit, jamais un pour l'ensemble : une
-       * note qui resume trente pages n'a pas d'endroit, ses blocs en ont un
-       * chacun.
+       * Les sources se verifient a l'ecriture et non a la pose, parce que
+       * l'assistant est encore la pour corriger. Une source refusee dix
+       * passages plus tard le forcerait a retrouver lequel, dans un texte
+       * qu'il a cesse de tenir en tete.
        *
-       * Une ancre manquante n'est pas un incident et ne se dit pas au modele :
-       * l'index fin peut n'avoir pas fini de calculer, un bloc peut ne
-       * ressembler a aucun passage. Ce bloc releve alors de la derniere ancre
-       * au-dessus de lui, ce qui est exactement le comportement qu'avait un
-       * ajout sans ancre. Le signaler n'apprendrait rien a l'assistant — il
-       * n'a plus rien a corriger — et le pousserait a s'en excuser aupres de
-       * l'utilisateur.
+       * Le schema d'outil garantit qu'une source est presente et non vide ;
+       * il ne peut rien dire de son existence dans ce cours-ci. C'est ici que
+       * la question se pose, et rien n'est ecrit tant qu'une seule reponse
+       * manque : un brouillon a moitie depose, dont le modele croirait la
+       * moitie refusee, se reecrirait en double.
        */
-      const content = await anchorInsertedBlocks(
-        courseId,
-        contenu,
-        unitKeysForAnchors(courseId, [...turn.cited])
-      )
-
-      // L'ancrage se verifie comme la cible d'un remplacement : sur la note
-      // telle qu'elle est maintenant — dans la vue, ou le modele l'a recopie —,
-      // et une seule occurrence.
-      if (apres?.trim()) {
-        const { markdown } = await currentNoteMarkdown(courseId)
-        const found = locate(viewOf(markdown), apres, 'ancre')
-        if (typeof found === 'string') return say(found)
-
-        const status = await proposeNoteChange({
-          courseId,
-          kind: 'inserer',
-          content,
-          target: found.target
+      const problems = passages
+        .map((passage, index) => {
+          const scope = declaredScope(courseId, passage.source)
+          return typeof scope === 'string'
+            ? `Passage ${index + 1} (« ${passage.source} ») : ${scope}`
+            : null
         })
-        return say(describeProposalStatus(status))
+        .filter((problem): problem is string => problem !== null)
+
+      if (problems.length > 0) {
+        return say(
+          `${problems.join('\n')}\n\nRien n'a été déposé. Corrige la ou les sources et rappelle note_brouillon avec tous les passages.`
+        )
       }
 
-      /**
-       * Sans cible ni consigne, la place de l'ajout se lit dans le cours et
-       * non dans l'ordre d'arrivee des notes : ce qui parle de la p. 60
-       * s'intercale entre ce qui parle des pp. 58 et 61, au lieu de s'empiler
-       * en fin de note derriere ce qui parle de la p. 107. L'ajout part en fin
-       * de note et c'est le tri qui suit l'application (`trier`) qui range
-       * chaque bloc a sa place — segment par segment, un ajout qui couvre
-       * plusieurs pages se repartit entre les notes existantes. Une place
-       * demandee explicitement — fin, curseur — prime sur l'ordre du cours.
-       */
-      const status = await proposeNoteChange({
-        courseId,
-        kind: 'inserer',
-        content,
-        position: position ?? 'fin',
-        trier: !position
-      })
-      return say(describeProposalStatus(status))
+      const all = await appendDraft(courseId, passages)
+      const total = all.length
+      return say(
+        `${passages.length} passage${passages.length > 1 ? 's' : ''} déposé${passages.length > 1 ? 's' : ''} au brouillon (${total} en attente au total). Continue, ou appelle note_poser quand tu as fini d'écrire.`
+      )
     }
   )
 
+  const notePoser = sdk.tool(
+    'note_poser',
+    "Ancre le brouillon et l'ecrit dans les notes du cours ouvert. L'application rattache chaque passage au passage precis du cours dont il parle — a l'interieur de la source que tu as declaree —, range le tout dans l'ordre du cours, et l'insere. Appelle-le une fois, quand tu as fini d'ecrire ; le brouillon est vide ensuite. L'ecriture est directe : l'utilisateur n'a rien a valider.",
+    {},
+    async () => {
+      const waiting = await readDraft(courseId)
+      if (waiting.length === 0) {
+        return say(
+          "Le brouillon est vide : rien à poser. Dépose d'abord tes passages avec note_brouillon."
+        )
+      }
+
+      const result = await postDraft(courseId)
+      const notes: string[] = []
+      if (result.rejected.length > 0) {
+        notes.push(
+          `Ces passages n'ont pas pu être posés et restent au brouillon :\n${result.rejected.join('\n')}`
+        )
+      }
+
+      if (result.posted > 0) {
+        notes.unshift(
+          `${result.posted} passage${result.posted > 1 ? 's' : ''} ancré${result.posted > 1 ? 's' : ''} et inséré${result.posted > 1 ? 's' : ''} dans les notes, à sa place dans l'ordre du cours.`
+        )
+        return say(notes.join('\n\n'))
+      }
+
+      // Rien n'est parti : le brouillon est intact et se reposera plus tard.
+      // On le dit, sinon le modele reecrirait ce qu'il vient d'ecrire.
+      notes.unshift(
+        result.outcome
+          ? describeProposalStatus(result.outcome)
+          : "Rien n'a pu être posé."
+      )
+      notes.push('Le brouillon est conservé : ne le réécris pas.')
+      return say(notes.join('\n\n'))
+    }
+  )
   const noteRemplacer = sdk.tool(
     'note_remplacer',
     "Propose de remplacer un passage precis des notes du cours ouvert — pour reformuler ou corriger sans toucher au reste. Pour retoucher un tableau, un schema ou un encadre, prefere note_objets puis note_objet_modifier, qui les visent par numero. L'utilisateur voit un apercu et decide ; l'appel attend sa decision.",
@@ -826,7 +837,7 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
 
   const noteReecrire = sdk.tool(
     'note_reecrire',
-    "Propose une nouvelle version complete de la note du cours ouvert. Reserve au cas ou l'utilisateur a explicitement demande une refonte d'ensemble — « mets au propre mes notes ». Pour tout le reste, note_inserer ou note_remplacer. L'utilisateur voit un apercu et decide ; l'appel attend sa decision.",
+    "Propose une nouvelle version complete de la note du cours ouvert. Reserve au cas ou l'utilisateur a explicitement demande une refonte d'ensemble — « mets au propre mes notes ». Pour tout le reste, note_brouillon ou note_remplacer. L'utilisateur voit un apercu et decide ; l'appel attend sa decision.",
     {
       contenu: z
         .string()
@@ -915,7 +926,7 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
 
       if (objects.length === 0) {
         return say(
-          "Cette note ne contient ni tableau, ni schéma, ni encadré. Pour en créer un, écris-le en Markdown avec note_inserer."
+          "Cette note ne contient ni tableau, ni schéma, ni encadré. Pour en créer un, écris-le en Markdown avec note_brouillon."
         )
       }
 
@@ -1213,7 +1224,8 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
       quiz,
       cartesCreer,
       noteLire,
-      noteInserer,
+      noteBrouillon,
+      notePoser,
       noteRemplacer,
       noteReecrire,
       noteTrier,
@@ -1264,7 +1276,8 @@ export const COURSE_TOOL_NAMES = [
   'mcp__cours__mes_surlignages',
   'mcp__cours__cartes_creer',
   'mcp__cours__note_lire',
-  'mcp__cours__note_inserer',
+  'mcp__cours__note_brouillon',
+  'mcp__cours__note_poser',
   'mcp__cours__note_remplacer',
   'mcp__cours__note_reecrire',
   'mcp__cours__note_objets',

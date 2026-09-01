@@ -89,6 +89,13 @@ interface NotesPanelProps {
    * ramenerait que des faux voisins.
    */
   visibleUnits: string[]
+  /**
+   * Les titres du cours affiche, dans l'ordre. C'est l'echelle qui range les
+   * ancres de ce panneau : une ancre nomme sa section, elle ne dit pas ou
+   * cette section tombe dans le cours, et c'est le rang du titre dans cette
+   * liste qui le dit. Vide pour un PDF, dont les pages se comparent seules.
+   */
+  sections: string[]
   /** La synchronisation des deux defilements, et son interrupteur. */
   syncOn: boolean
   onToggleSync: () => void
@@ -103,6 +110,13 @@ interface NotesPanelProps {
   follow: { anchor: NoteAnchor; nonce: number } | null
   expanded: boolean
   onToggleExpand: () => void
+  /**
+   * Decoche dans le bandeau : la feuille quitte l'ecran mais reste montee.
+   * C'est par ce panneau que passent les outils d'ecriture de l'assistant, le
+   * ⌘S de la barre de titre et l'insertion depuis le chat — demonte, il
+   * n'ecoute plus rien et ces gestes tombent dans le vide.
+   */
+  hidden: boolean
   /** Remonte l'etat pour que le bouton de la barre de titre dise la verite. */
   onSaveState: (state: SaveState) => void
   /** Demande a l'assistant de mettre la note au propre. */
@@ -206,12 +220,59 @@ async function validateProposal(content: string): Promise<string | null> {
   return null
 }
 
+/**
+ * L'endroit du cours qu'une ancre designe, le passage mis de cote.
+ *
+ * `sameAnchor` compare aussi le passage, et c'est ce qu'il faut partout
+ * ailleurs : deux notes d'une meme page ne commentent pas la meme phrase. Mais
+ * la ligne de lecture, elle, ne designe qu'un lieu et n'a jamais de passage —
+ * tandis qu'un bloc de note ancre finement en porte toujours un. Les comparer
+ * avec `sameAnchor` renvoyait donc faux pour exactement les blocs qui
+ * comptent, et le panneau ne suivait plus rien.
+ */
+function placeOf(anchor: NoteAnchor | null): string | null {
+  if (!anchor) return null
+  if (anchor.page !== null) return `page:${anchor.page}`
+  if (anchor.section !== null) return `section:${anchor.section}`
+  return anchor.progress === null ? null : `progress:${anchor.progress}`
+}
+
+/** Le meme endroit du cours, au sens du defilement. */
+function samePlace(a: NoteAnchor | null, b: NoteAnchor | null): boolean {
+  const place = placeOf(a)
+  return place !== null && place === placeOf(b)
+}
+
+/**
+ * La place d'une ancre dans l'ordre du cours, pour savoir laquelle vient
+ * avant l'autre.
+ *
+ * Trois echelles, jamais melangees au sein d'un meme document : le numero de
+ * page d'un PDF, le rang du titre pour un document a sections, la fraction
+ * parcourue d'un support d'un seul bloc. La deuxieme est celle qui manquait —
+ * un titre n'a pas d'ordre en lui-meme, il le tient de sa place dans le
+ * document, que le panneau du cours nous donne.
+ *
+ * Rendre null n'est pas une erreur : une ancre sans lieu, un titre disparu
+ * d'un cours refait. Elle ne classe rien, elle n'empeche rien non plus.
+ */
+function placeRank(anchor: NoteAnchor | null, sections: string[]): number | null {
+  if (!anchor) return null
+  if (anchor.page !== null) return anchor.page
+  if (anchor.section !== null) {
+    const at = sections.indexOf(anchor.section)
+    return at === -1 ? null : at
+  }
+  return anchor.progress
+}
+
 export default function NotesPanel({
   course,
   saveRequest,
   insert,
   reading,
   visibleUnits,
+  sections,
   syncOn,
   onToggleSync,
   onGoTo,
@@ -219,6 +280,7 @@ export default function NotesPanel({
   follow,
   expanded,
   onToggleExpand,
+  hidden,
   onSaveState,
   onTidy,
   onProposalShown,
@@ -324,6 +386,9 @@ export default function NotesPanel({
   /** Ce que le cours affiche a l'instant, lisible depuis les rappels figes. */
   const visibleRef = useRef(visibleUnits)
   visibleRef.current = visibleUnits
+  /** Lue depuis le suivi du defilement, qui ne se redeclenche que sur son compteur. */
+  const sectionsRef = useRef(sections)
+  sectionsRef.current = sections
 
   /**
    * Meme indirection que `scheduleSaveRef`, et pour la meme raison : ces deux
@@ -512,6 +577,15 @@ export default function NotesPanel({
   }, [scheduleSave])
 
   // Charge la note du cours ouvert, apres avoir enregistre la precedente.
+  //
+  // L'effet suit l'identifiant, jamais l'objet, pour la raison que CoursePanel
+  // documente de son cote : `useVault` reconstruit tous ses `Course` a chaque
+  // remous du vault. Suivre l'objet rechargerait la note depuis le disque et
+  // rendrait le curseur au debut du document — au premier mot ecrit dans une
+  // note vierge, precisement, puisque c'est la que la pastille bascule et que
+  // l'ecran est prevenu.
+  const openCourseId = course?.id ?? null
+
   useEffect(() => {
     if (!editor) return
     let cancelled = false
@@ -524,17 +598,17 @@ export default function NotesPanel({
         await save()
       }
 
-      if (!course) {
+      if (!openCourseId) {
         loadedCourseId.current = null
         withoutAnchoring(() => editor.commands.setContent('', { emitUpdate: false }))
         measure()
         return
       }
 
-      const note = await window.noted.notes.read(course.id)
+      const note = await window.noted.notes.read(openCourseId)
       if (cancelled) return
 
-      loadedCourseId.current = course.id
+      loadedCourseId.current = openCourseId
       // emitUpdate: false, sinon le simple chargement declencherait une
       // sauvegarde et reecrirait le fichier a chaque ouverture.
       withoutAnchoring(() =>
@@ -547,7 +621,7 @@ export default function NotesPanel({
     return () => {
       cancelled = true
     }
-  }, [course, editor, save, measure, withoutAnchoring])
+  }, [openCourseId, editor, save, measure, withoutAnchoring])
 
   // Enregistrement de securite a la fermeture de la fenetre.
   useEffect(() => {
@@ -620,7 +694,7 @@ export default function NotesPanel({
    *
    * Elle ne s'empile plus en fin de note : le main lui donne ses ancres et sa
    * place dans l'ordre du cours, exactement comme a un ajout de l'assistant
-   * par « note_inserer » — les pages qu'elle cite disent de quoi elle parle.
+   * par le brouillon — les pages qu'elle cite disent de quoi elle parle.
    * La fin de note reste le repli, note sans marqueurs ou endroit illisible :
    * c'est le comportement qu'avait le bouton.
    */
@@ -749,11 +823,17 @@ export default function NotesPanel({
    * Le cours a defile : les notes suivent. On cherche le premier bloc rattache
    * a cet endroit ; a defaut, le dernier ecrit avant lui — on voit toujours ou
    * l'on en etait, jamais un panneau qui saute en arriere.
+   *
+   * Les deux questions se posent sur le *lieu* seul — page ou section — et
+   * jamais sur le passage : la ligne de lecture du cours n'en designe aucun,
+   * et un bloc ancre finement en porte toujours un. C'est le sens de
+   * `samePlace` et de `placeRank`, la ou l'on comparait des ancres entieres.
    */
   useEffect(() => {
     const body = bodyRef.current
     if (!follow || !editor || !body) return
 
+    const rank = placeRank(follow.anchor, sectionsRef.current)
     const children = editor.view.dom.children
     const seen: {
       inherited: NoteAnchor | null
@@ -769,18 +849,11 @@ export default function NotesPanel({
       if (anchor) seen.inherited = anchor
       if (!element) return
 
-      if (!seen.target && sameAnchor(seen.inherited, follow.anchor)) seen.target = element
+      if (!seen.target && samePlace(seen.inherited, follow.anchor)) seen.target = element
       // A defaut, le dernier bloc ecrit avant cet endroit du cours : on voit
       // toujours ou l'on en etait, jamais un panneau qui saute en arriere.
-      const page = seen.inherited?.page
-      if (
-        page !== null &&
-        page !== undefined &&
-        follow.anchor.page !== null &&
-        page <= follow.anchor.page
-      ) {
-        seen.fallback = element
-      }
+      const at = placeRank(seen.inherited, sectionsRef.current)
+      if (at !== null && rank !== null && at <= rank) seen.fallback = element
     })
 
     const destination = seen.target ?? seen.fallback
@@ -1338,7 +1411,13 @@ export default function NotesPanel({
 
         // En mode Auto, pas de salle d'attente : la proposition s'applique et
         // la carte raconte ce qui vient de se passer, annulation comprise.
-        if (autoApply) {
+        //
+        // `direct` fait de meme sans que le mode soit actif. C'est la pose d'un
+        // brouillon : l'assistant l'a compose passage par passage sous les yeux
+        // de l'utilisateur, dans le fil du chat, et une carte de confirmation a
+        // l'arrivee lui redemanderait une decision sur un texte qu'il a deja lu.
+        // La carte d'apres-coup, elle, reste — c'est par elle qu'on annule.
+        if (autoApply || incoming.direct) {
           void applyIncoming(incoming, true)
         } else {
           setProposal({
@@ -1624,7 +1703,7 @@ export default function NotesPanel({
   }, [cite, editor, mentionSource, onMention, locateMention])
 
   return (
-    <section className="panel panel--notes">
+    <section className="panel panel--notes" hidden={hidden}>
       <header className="panel-head">
         <PanelLabel label="Notes" shortcut="⌘2" expanded={expanded} onToggle={onToggleExpand} />
         {course && (

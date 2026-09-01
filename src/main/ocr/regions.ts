@@ -139,87 +139,44 @@ export function tidy(regions: Region[]): { region: Region; kind: JobKind }[] {
  * alors de gauche a droite. Sans cela, une diapositive en deux colonnes se
  * lirait en zigzag — une ligne a gauche, une ligne a droite — et le cours
  * serait illisible sans qu'aucune region n'ait pourtant ete mal lue.
+ *
+ * **On construit les bandes, on ne les devine pas dans un comparateur.** La
+ * version precedente decidait au coup par coup — « meme bande ? alors gauche a
+ * droite, sinon haut en bas » — et cette regle n'est pas un ordre : A avant B,
+ * B avant C, et pourtant C avant A se construit sans peine sur une diapositive
+ * a deux colonnes coiffee d'un bandeau. `Array.prototype.sort` ne promet alors
+ * plus rien du tout, et la page ressortait dans un ordre que rien n'expliquait.
+ *
+ * Une bande est donc formee d'abord, autour de sa **premiere** region — et non
+ * de son etendue accumulee, qui grandirait a chaque ajout jusqu'a avaler la
+ * page. L'ordre qui en sort est total par construction : les bandes se suivent
+ * dans l'ordre de leur premiere region, et chaque bande se lit de gauche a
+ * droite.
  */
 export function readingOrder(entries: { region: Region; kind: JobKind }[]): typeof entries {
-  const ordered = [...entries]
+  const byTop = [...entries].sort((a, b) => a.region.top - b.region.top || a.region.left - b.region.left)
 
-  ordered.sort((a, b) => {
-    const first = a.region
-    const second = b.region
+  const bands: (typeof entries)[] = []
 
-    const top = Math.max(first.top, second.top)
-    const bottom = Math.min(first.top + first.height, second.top + second.height)
-    const shared = Math.max(0, bottom - top)
-    const shorter = Math.min(first.height, second.height)
+  for (const entry of byTop) {
+    const band = bands[bands.length - 1]
+    const first = band?.[0].region
 
-    // Meme bande : c'est la position horizontale qui decide.
-    if (shorter > 0 && shared / shorter > 0.5) return first.left - second.left
-
-    return first.top - second.top
-  })
-
-  return ordered
-}
-
-/**
- * Regroupe les blocs de texte qui se suivent.
- *
- * Un appel par paragraphe couterait cher : chaque requete paie l'encodage de
- * son image et le retour du serveur, et une page de neuf paragraphes en ferait
- * neuf. Deux blocs de texte qui se suivent dans l'ordre de lecture et se
- * recouvrent horizontalement sont donc lus ensemble, dans une seule image.
- *
- * **Les titres ne sont jamais absorbes**, et c'est le coeur de l'affaire. La
- * tache « Text Recognition: » rend du texte nu, sans niveaux : c'est le
- * detecteur, et lui seul, qui sait qu'une ligne etait un titre. Le lire a part
- * est ce qui permet d'ecrire « ## » devant — une structure que la page entiere
- * ne donnait jamais.
- */
-export function group(entries: { region: Region; kind: JobKind }[]): typeof entries {
-  const grouped: typeof entries = []
-
-  for (const entry of entries) {
-    const last = grouped[grouped.length - 1]
-
-    if (last && last.kind === 'text' && entry.kind === 'text' && adjacent(last.region, entry.region)) {
-      grouped[grouped.length - 1] = { kind: 'text', region: merge(last.region, entry.region) }
-      continue
-    }
-
-    grouped.push(entry)
+    if (first && sameBand(first, entry.region)) band.push(entry)
+    else bands.push([entry])
   }
 
-  return grouped
+  return bands.flatMap((band) => [...band].sort((a, b) => a.region.left - b.region.left))
 }
 
-/** Ecart vertical maximal, en fraction de la hauteur du bloc precedent. */
-const GAP = 1.5
+/** Deux regions se chevauchent-elles verticalement de plus de la moitie ? */
+function sameBand(first: Region, second: Region): boolean {
+  const top = Math.max(first.top, second.top)
+  const bottom = Math.min(first.top + first.height, second.top + second.height)
+  const shared = Math.max(0, bottom - top)
+  const shorter = Math.min(first.height, second.height)
 
-function adjacent(first: Region, second: Region): boolean {
-  const left = Math.max(first.left, second.left)
-  const right = Math.min(first.left + first.width, second.left + second.width)
-  // Sans recouvrement horizontal, ce sont deux colonnes : les coller ferait une
-  // image ou le modele lirait de travers.
-  if (right - left < Math.min(first.width, second.width) * 0.5) return false
-
-  const gap = second.top - (first.top + first.height)
-  return gap >= 0 && gap < first.height * GAP
-}
-
-function merge(first: Region, second: Region): Region {
-  const left = Math.min(first.left, second.left)
-  const top = Math.min(first.top, second.top)
-  const right = Math.max(first.left + first.width, second.left + second.width)
-  const bottom = Math.max(first.top + first.height, second.top + second.height)
-
-  return {
-    label: first.label,
-    score: Math.min(first.score, second.score),
-    left,
-    top,
-    width: right - left,
-    height: bottom - top
-  }
+  return shorter > 0 && shared / shorter > 0.5
 }
 
 /**
@@ -245,7 +202,7 @@ const MINIMUM = 24
  * et le tableau reste le mieux servi de la page parce qu'il est le plus grand.
  */
 export function planPage(layout: PageLayout): Job[] {
-  const entries = group(readingOrder(tidy(layout.regions)))
+  const entries = readingOrder(tidy(layout.regions))
 
   const boxes = entries
     .map(({ region, kind }) => ({

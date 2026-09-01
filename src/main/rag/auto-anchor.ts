@@ -2,10 +2,18 @@
  * Le passage du cours dont un texte de note parle le plus.
  *
  * Une note s'ecrit de deux mains dans cette application : celle du lecteur, qui
- * tape dans l'editeur, et celle de l'assistant, qui insere un bloc par
- * `note_inserer`. Les deux posent pourtant exactement la meme question — de quel
- * paragraphe du cours ce texte-ci parle-t-il — et surtout, les deux doivent en
- * recevoir exactement la meme reponse. Deux implementations, meme fideles l'une
+ * tape dans l'editeur, et celle de l'assistant, qui depose ses passages dans un
+ * brouillon. Les deux posent pourtant la meme question — de quel paragraphe du
+ * cours ce texte-ci parle-t-il — et doivent en recevoir la meme reponse.
+ *
+ * Avec une difference que le chantier des sources declarees a introduite, et
+ * qui est tout son propos : l'assistant, lui, *dit* la page ou la section sur
+ * laquelle il ecrit, et sa parole est une contrainte (`scope`), pas un indice.
+ * Le lecteur ne dit rien — il tape — et son bloc traverse les cercles de
+ * `circles` comme avant. Une seule machinerie, deux niveaux de certitude sur
+ * l'entree : c'est ce qui permet au vecteur de ne repondre qu'a la question ou
+ * il est bon, « quelle phrase », des lors que quelqu'un sait repondre a
+ * l'autre, « quelle page ». Deux implementations, meme fideles l'une
  * a l'autre le jour de leur ecriture, finiraient par diverger d'un reglage ou
  * d'une correction : la marge des notes raconterait alors deux histoires
  * differentes selon qui a tenu le stylo, sur un cours ou rien n'a change. D'ou
@@ -33,6 +41,8 @@ import { compareOrderKeys } from '../../shared/note-order'
 import type { NoteAnchor, OrderKey } from '../../shared/types'
 import type { FineChunk } from './chunk-fine'
 import { embed } from './embedder'
+import { parsePageReference } from './page-range'
+import { foldHeading } from './search'
 import { fineIndexedCourse } from './store-fine'
 import type { FineIndexedCourse } from './store-fine'
 
@@ -67,6 +77,121 @@ export interface AnchorSlot {
   text: string
   cited: number[]
   fixed?: NoteAnchor | null
+  /**
+   * Les unites du cours ou chercher, quand l'assistant a declare l'endroit sur
+   * lequel il ecrit (`declaredScope`).
+   *
+   * A la difference de tous les autres filtres de ce fichier, celui-ci est une
+   * contrainte et non un cercle : on n'en sort pas. C'est le renversement du
+   * chantier. Le vecteur ne repond plus qu'a « quelle phrase de cette
+   * page-ci », question a laquelle il est bon ; il ne repond plus a « quelle
+   * page du cours », question a laquelle il repondait toujours quelque chose,
+   * et donc rien de verifiable. Le premier est un fait que l'assistant vient
+   * de lire, le second une mesure de ressemblance : les confondre etait la
+   * faute de fond de l'ancrage precedent.
+   */
+  scope?: string[]
+  /**
+   * L'ancre du lieu seul — « la p. 54 », sans passage — a rendre quand rien
+   * de plus fin ne peut etre choisi.
+   *
+   * C'est ce qui supprime l'ancre nulle, et avec elle l'heritage silencieux.
+   * L'index pas encore charge, les vecteurs pas encore calcules, le moteur
+   * tombe, une page de figures sans texte : autant de chemins qui rendaient
+   * `null`, donc aucun marqueur, donc — a la relecture — un bloc releve de
+   * l'ancre du dessus. Rien ne distinguait cet echec d'un partage d'ancre
+   * voulu. Avec un repli, le pire cas devient « la bonne page, pas la bonne
+   * phrase », qui se lit, se verifie et se corrige.
+   */
+  place?: NoteAnchor
+}
+
+/**
+ * L'endroit du cours qu'un passage declare, traduit pour l'ancrage.
+ *
+ * `unitKeys` restreint la recherche du passage ; `place` est l'ancre du lieu
+ * seul, qui sert de repli. Les deux viennent de la meme lecture de l'index :
+ * une portee qui ne se resout pas ne rend rien du tout.
+ */
+export interface DeclaredScope {
+  unitKeys: string[]
+  place: NoteAnchor
+}
+
+/** L'ancre d'un lieu, sans passage : ce que designe une source declaree. */
+function placeAnchor(page: number | null, section: string | null): NoteAnchor {
+  return { page, section, progress: null, passage: null, figure: null }
+}
+
+/**
+ * La portee d'une source declaree par l'assistant, ou le message a lui rendre.
+ *
+ * La source s'ecrit dans le vocabulaire que « lire » et « rechercher » lui
+ * rendent — « p. 54 », « p. 60-61 », « 3.4  Les donnees » — et se juge ici
+ * avec la meme tolerance : `parsePageReference` pour un document pagine,
+ * `foldHeading` pour un document a titres, exactement les deux fonctions que
+ * la lecture emploie. Un titre accepte a la lecture doit rester accepte a
+ * l'ecriture, sans quoi l'assistant recopierait une reference qui vient de
+ * marcher et se ferait refuser.
+ *
+ * Le schema d'outil garantit qu'une source est *presente* ; il ne peut rien
+ * dire de son existence. « p. 999 » sur un document de 512 pages passe toutes
+ * les validations de forme. C'est ici que la question se pose, et la reponse
+ * est une phrase que le modele lit et corrige — l'utilisateur ne voit rien.
+ */
+export function declaredScope(courseId: string, source: string): DeclaredScope | string {
+  const clean = source.trim()
+  if (!clean) return 'Source vide : indique la page ou la section du cours sur laquelle tu ecris.'
+
+  const course = fineIndexedCourse(courseId)
+  if (!course) {
+    return "Le cours n'est pas encore indexé. Demande à l'utilisateur de patienter quelques secondes, puis réessaie."
+  }
+
+  const pages = course.index.passages
+    .map((chunk) => chunk.page)
+    .filter((page): page is number => page !== null)
+
+  if (pages.length > 0) {
+    const last = Math.max(...pages)
+    const span = parsePageReference(clean)
+    if (!span) {
+      return `Source illisible : « ${clean} ». Ce document est paginé : écris « p. 54 » ou « p. 60-61 ».`
+    }
+    if (span.from > last) {
+      return `Il n'y a pas de p. ${span.from} : ce document compte ${last} pages.`
+    }
+    const to = Math.min(span.to, last)
+    const unitKeys: string[] = []
+    for (let page = span.from; page <= to; page += 1) unitKeys.push(`page:${page}`)
+    return { unitKeys, place: placeAnchor(span.from, null) }
+  }
+
+  // Document a titres. Le repli porte le titre tel que l'index l'ecrit, et non
+  // tel que l'assistant l'a tape : `anchorOrderKey` retrouve la section par
+  // egalite stricte sur `heading`, et une variante de casse la rendrait
+  // introuvable — la note se rangerait alors en tete, sans qu'on sache
+  // pourquoi.
+  const needle = foldHeading(clean)
+  const matched = needle
+    ? course.index.passages.filter((chunk) => {
+        if (!chunk.unitKey.startsWith('section:')) return false
+        const path = foldHeading(chunk.anchor)
+        if (path === needle || path.includes(needle)) return true
+        if (!chunk.heading) return false
+        const leaf = foldHeading(chunk.heading)
+        return leaf === needle || needle.includes(leaf)
+      })
+    : []
+
+  if (matched.length === 0) {
+    return `Aucune section « ${clean} » dans ce document. Vérifie le titre exact dans le plan, ou relis la section avec « lire ».`
+  }
+
+  return {
+    unitKeys: [...new Set(matched.map((chunk) => chunk.unitKey))],
+    place: placeAnchor(null, matched[0].heading)
+  }
 }
 
 /** Combien de passages proches on regarde avant de choisir. */
@@ -137,6 +262,10 @@ function pageKeys(from: number, to: number): string[] {
 function knownPages(slot: AnchorSlot): number[] | null {
   if (slot.cited.length > 0) return slot.cited
   if (slot.fixed?.page != null) return [slot.fixed.page]
+  // Une page declaree est une page connue, au meme titre qu'une page citee :
+  // elle borne ses voisins non declares dans une suite mixte — une reecriture,
+  // ou des blocs conserves et des blocs neufs se melent.
+  if (slot.place?.page != null) return [slot.place.page]
   return null
 }
 
@@ -164,9 +293,16 @@ function circles(
   paged: boolean,
   extent: [number, number] | null
 ): string[][] {
+  const slot = slots[index]
+
+  // Une portee declaree ne se quitte pas : c'est le seul cercle, et s'il ne
+  // retient rien le bloc retombe sur son lieu (`place`), jamais sur le reste
+  // du cours. Elargir ici reintroduirait exactement ce que le chantier
+  // supprime — une ancre plausible choisie loin de ce que l'assistant a lu.
+  if (slot.scope) return [slot.scope]
+
   const tiers: string[][] = []
   if (paged && extent) {
-    const slot = slots[index]
     if (slot.cited.length > 0) tiers.push(slot.cited.map((page) => `page:${page}`))
 
     let lo: number | undefined
@@ -227,7 +363,15 @@ export async function resolveAnchorSequence(
   slots: AnchorSlot[],
   consultedUnitKeys: string[]
 ): Promise<(NoteAnchor | null)[]> {
-  const anchors: (NoteAnchor | null)[] = slots.map((slot) => slot.fixed ?? null)
+  // Le repli est pose des maintenant, avant toute machinerie. C'est ce qui
+  // couvre d'un seul geste les six chemins par lesquels ce fichier rendait
+  // `null` — index absent, vecteurs pas calcules, `embed` en echec ou decale,
+  // exception, aucun candidat, texte vide : chacun laisse desormais en place
+  // le lieu que l'assistant a declare, au lieu de laisser le bloc heriter de
+  // son voisin du dessus.
+  const anchors: (NoteAnchor | null)[] = slots.map((slot) =>
+    slot.fixed !== undefined ? slot.fixed : (slot.place ?? null)
+  )
 
   const alive = slots
     .map((slot, index) => ({ text: slot.text.trim(), index }))
@@ -274,15 +418,22 @@ export async function resolveAnchorSequence(
         previous = slot.fixed ? (anchorOrderKeyIn(course, slot.fixed) ?? previous) : previous
         return
       }
+      // Le lieu declare tient le rang tant que rien de plus fin ne le remplace :
+      // un bloc qui retombe sur son repli borne quand meme ses voisins, au lieu
+      // de laisser l'ordre au dernier bloc qui a su s'ancrer.
+      const fallback = (): void => {
+        if (slot.place) previous = anchorOrderKeyIn(course, slot.place) ?? previous
+      }
+
       const vector = vectorOf.get(index)
-      if (!vector) return
+      if (!vector) return fallback()
 
       let candidates: { chunk: FineChunk; score: number }[] = []
       for (const tier of circles(slots, index, consultedUnitKeys, paged, extent)) {
         candidates = course.index.topK(vector, CANDIDATES, tier)
         if (candidates.length > 0) break
       }
-      if (candidates.length === 0) return
+      if (candidates.length === 0) return fallback()
 
       // Seul, un bloc prend le meilleur score. Dans une suite, parmi les
       // candidats a ORDER_MARGIN du meilleur qui ne reculent pas, la page la

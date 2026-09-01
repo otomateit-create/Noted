@@ -18,16 +18,20 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { sameAnchor, type NoteAnchor } from '@shared/types'
 
 /**
- * Les blocs qui portent une ancre. On s'en tient a ce qu'on ecrit en prenant
- * des notes ; un tableau, un encadre ou un schema porte deja son propre
- * marqueur au-dessus de lui et releve du bloc qui le precede.
- */
-/**
- * Les blocs qui peuvent porter une ancre et une identite.
+ * Les blocs qui peuvent porter une ancre.
  *
- * Exportee parce que l'absence d'identite ne veut dire « ecrit un autre jour »
- * que pour ces types-la. Un tableau ou une image n'en recoivent jamais : lire
- * leur silence comme une frontiere couperait un groupe en deux sans raison.
+ * Un tableau, un encadre et un schema en font partie. Longtemps ils en etaient
+ * exclus, et l'exclusion se defendait tant qu'ils sortaient de la main de
+ * l'utilisateur : on les ecrit sous le paragraphe dont ils parlent, dont ils
+ * relevent naturellement. Elle ne se defend plus depuis que l'assistant
+ * declare lui-meme le groupe auquel un bloc appartient : un groupe qui
+ * s'ouvre sur un tableau — c'est le cas d'une comparaison posee seule — n'avait
+ * alors aucun endroit ou poser son marqueur, et il relevait en silence du
+ * groupe precedent. L'ancre etait calculee, juste, et jetee entre le fichier et
+ * l'ecran.
+ *
+ * Mesure sur le vault reel avant correction : de sept a douze blocs par note
+ * heritaient ainsi par impossibilite, jamais par decision.
  */
 export const ANCHORED = [
   'paragraph',
@@ -35,7 +39,10 @@ export const ANCHORED = [
   'bulletList',
   'orderedList',
   'blockquote',
-  'codeBlock'
+  'codeBlock',
+  'table',
+  'callout',
+  'diagram'
 ]
 
 export interface AnchorOptions {

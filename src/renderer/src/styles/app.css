@@ -8,23 +8,18 @@
   height: 100%;
 }
 
-/* La coque d'accueil pose ses plaques de verre sur le bureau creme de
-   l'espace de travail : le meme ivoire, d'un bord a l'autre de la fenetre.
-   Les nappes de couleur — laiton, sauge, terre cuite, un bleu discret — sont
-   ce que le verre depolit : sans elles, la transparence et le flou des
-   plaques n'auraient rien a montrer. */
+/* La coque d'accueil pose ses plaques de verre sur le bureau : un aplat
+   unique, l'ivoire du bureau rechauffe d'une pointe de laiton, d'un bord a
+   l'autre de la fenetre. Plus de nappes de couleur a depolir : le verre des
+   plaques n'a plus rien a flouter, il ne fait qu'eclaircir ce qui passe
+   derriere lui. */
 .app:is(
     [data-view='dashboard'],
     [data-view='flashcards'],
     [data-view='memoire'],
     [data-view='subject']
   ) {
-  background:
-    radial-gradient(52% 44% at 10% -4%, rgba(196, 146, 40, 0.26), transparent 70%),
-    radial-gradient(46% 40% at 92% 8%, rgba(46, 139, 87, 0.17), transparent 70%),
-    radial-gradient(52% 48% at 82% 100%, rgba(178, 92, 55, 0.18), transparent 70%),
-    radial-gradient(40% 38% at 4% 96%, rgba(44, 111, 175, 0.13), transparent 70%),
-    var(--paper-deep);
+  background: color-mix(in srgb, rgb(196 146 40) 10%, var(--paper-deep));
 }
 
 /* Le premier ecran est desormais le tableau de bord : l'image d'attente prend
@@ -209,6 +204,19 @@
 .workspace[data-focus='chat'] > .panel--chat {
   display: flex;
   flex: 1;
+}
+
+/* --- Feuille decochee -----------------------------------------------------
+   La meme raison, poussee plus loin : decocher les notes dans le bandeau les
+   retire de l'ecran, pas du document. Le panneau reste monte parce qu'il est
+   le seul a repondre aux outils d'ecriture de l'assistant, au ⌘S et a
+   l'insertion depuis le chat. `[hidden]` de la feuille de style du navigateur
+   ne suffit pas — `.panel` remet `display: flex` — et la regle du mode
+   concentration ci-dessus le rallumerait : d'ou la selection depuis
+   .workspace, dans les deux etats. */
+.workspace > .panel--notes[hidden],
+.workspace[data-focus] > .panel--notes[hidden] {
+  display: none;
 }
 
 /* Le grossissement en cours, et le moyen d'y renoncer. Absent a 100 %, ou il

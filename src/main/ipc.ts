@@ -15,6 +15,7 @@ import type {
   Annotation,
   ChatEffort,
   ChatSendInput,
+  CoursePreview,
   ExtractedCourse,
   ImportResult,
   PhotoProposal,
@@ -48,6 +49,7 @@ import {
 } from './courses'
 import { convertDocxFile, readDocx } from './docx'
 import { readExtraction, saveExtraction } from './extraction-cache'
+import { readPreview, savePreview } from './preview-cache'
 import { bindMemoryBridge, cancelMemoryTrace } from './memory/bridge'
 import { removeEntry } from './memory/entries'
 import { allMemoryEntries, invalidateMemoryIndex } from './memory/rag'
@@ -152,14 +154,22 @@ function sortSelection(paths: string[]): { documents: string[]; photos: string[]
  * elles, ne sont que **proposees** : rien n'est ecrit, l'ordre revient a
  * l'ecran, et c'est l'utilisateur qui lance la lecture ou l'abandonne.
  */
-async function receiveFiles(paths: string[], subject: string): Promise<ImportResult> {
+async function receiveFiles(
+  paths: string[],
+  subject: string,
+  folder: string | null
+): Promise<ImportResult> {
   const { documents, photos } = sortSelection(paths)
 
   const imported: string[] = []
   for (const file of documents) {
-    imported.push(await importCourseFile(file, subject))
+    imported.push(await importCourseFile(file, subject, folder))
   }
 
+  // Les photos ne suivent pas le dossier de classement : leur import passe par
+  // une file d'attente qui se repere deja par un chemin `matiere/dossier`, ou
+  // « dossier » designe l'archive des originaux. Un cours lu depuis des photos
+  // arrive donc a la racine de la matiere, et se range ensuite comme un autre.
   return { imported, photos: photos.length > 0 ? await proposePhotos(photos, subject) : null }
 }
 
@@ -168,6 +178,11 @@ function expectString(value: unknown, label: string): string {
     throw new Error(`${label} invalide`)
   }
   return value
+}
+
+/** Un argument facultatif : absent, vide ou d'un autre type valent « rien ». */
+function optionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
 }
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
@@ -196,13 +211,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     shell.showItemInFolder(requested)
   })
 
-  ipcMain.handle(CHANNELS.vaultImportCourses, async (_event, subject: unknown) => {
+  ipcMain.handle(CHANNELS.vaultImportCourses, async (_event, subject: unknown, folder: unknown) => {
     const target = expectString(subject, 'Matière')
+    const into = optionalString(folder)
     const window = getWindow()
     if (!window) return { imported: [], photos: null }
 
     const result = await dialog.showOpenDialog(window, {
-      title: `Ajouter des cours dans ${target}`,
+      title: `Ajouter des cours dans ${into ? `${target} › ${into}` : target}`,
       message:
         'PDF, Word, PowerPoint, Markdown, HTML — ou des photos et captures d’écran, qui deviendront un seul cours.',
       properties: ['openFile', 'multiSelections'],
@@ -211,15 +227,18 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
     if (result.canceled) return { imported: [], photos: null }
 
-    return receiveFiles(result.filePaths, target)
+    return receiveFiles(result.filePaths, target, into)
   })
 
-  ipcMain.handle(CHANNELS.vaultImportPaths, async (_event, paths: unknown, subject: unknown) => {
-    const target = expectString(subject, 'Matière')
-    if (!Array.isArray(paths)) throw new Error('Liste de fichiers invalide')
+  ipcMain.handle(
+    CHANNELS.vaultImportPaths,
+    async (_event, paths: unknown, subject: unknown, folder: unknown) => {
+      const target = expectString(subject, 'Matière')
+      if (!Array.isArray(paths)) throw new Error('Liste de fichiers invalide')
 
-    return receiveFiles(paths, target)
-  })
+      return receiveFiles(paths, target, optionalString(folder))
+    }
+  )
 
   ipcMain.handle(CHANNELS.vaultCreateSubject, (_event, name: unknown) =>
     createSubject(expectString(name, 'Nom de matière'))
@@ -259,6 +278,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   // lues deux fois — vingt secondes chacune. Chainer les passages d'un meme
   // cours suffit : le second repart du cache et ne coute plus rien.
   const figuresRuns = new Map<string, Promise<void>>()
+
+  ipcMain.handle(CHANNELS.coursePreviewRead, (_event, courseId: unknown) =>
+    readPreview(expectString(courseId, 'Identifiant de cours'))
+  )
+
+  ipcMain.handle(CHANNELS.coursePreviewCache, (_event, courseId: unknown, preview: unknown) => {
+    // Comme l'extraction : l'image part sur le disque sans que rien ne l'attende.
+    void savePreview(expectString(courseId, 'Identifiant de cours'), preview as CoursePreview)
+  })
 
   ipcMain.handle(CHANNELS.courseReadExtraction, (_event, courseId: unknown) =>
     readExtraction(expectString(courseId, 'Identifiant de cours'))
@@ -304,8 +332,14 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     renameCourse(expectString(courseId, 'Identifiant de cours'), expectString(title, 'Nouveau nom'))
   )
 
-  ipcMain.handle(CHANNELS.courseMove, (_event, courseId: unknown, subject: unknown) =>
-    moveCourse(expectString(courseId, 'Identifiant de cours'), expectString(subject, 'Matière'))
+  ipcMain.handle(
+    CHANNELS.courseMove,
+    (_event, courseId: unknown, subject: unknown, folder: unknown) =>
+      moveCourse(
+        expectString(courseId, 'Identifiant de cours'),
+        expectString(subject, 'Matière'),
+        optionalString(folder)
+      )
   )
 
   ipcMain.handle(CHANNELS.courseDelete, (_event, courseId: unknown) =>
@@ -324,7 +358,15 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     async (_event, courseId: unknown, markdown: unknown) => {
       const course = await findCourse(expectString(courseId, 'Identifiant de cours'))
       if (typeof markdown !== 'string') throw new Error('Contenu de note invalide')
-      await writeNote(course, markdown)
+
+      // Le cours vient de gagner ou de perdre sa note : la page de matiere
+      // affiche une pastille qui en depend, et Notes/ n'est pas surveille.
+      // On ne previent qu'a la bascule — a chaque sauvegarde, ce serait
+      // relire tout le vault a chaque pause de frappe.
+      if (await writeNote(course, markdown)) {
+        const window = getWindow()
+        if (window && !window.isDestroyed()) window.webContents.send(CHANNELS.vaultChanged)
+      }
     }
   )
 

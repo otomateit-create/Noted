@@ -22,7 +22,9 @@ import type { NoteProposal } from '../../shared/types'
  * syntaxe est courte, et un schema a moitie ecrit ne se dessine pas.
  */
 const DRAFTED: Record<string, { kind: NoteProposal['kind']; key: string }> = {
-  mcp__cours__note_inserer: { kind: 'inserer', key: 'contenu' },
+  // Le brouillon depose plusieurs passages en un appel : la cle revient une
+  // fois par passage, et `draftText` les recolle dans l'ordre d'ecriture.
+  mcp__cours__note_brouillon: { kind: 'inserer', key: 'contenu' },
   mcp__cours__note_remplacer: { kind: 'remplacer', key: 'remplacement' },
   mcp__cours__note_reecrire: { kind: 'reecrire', key: 'contenu' }
 }
@@ -44,15 +46,45 @@ const SIMPLE_ESCAPES: Record<string, string> = {
 }
 
 /**
- * La valeur du champ `key` dans un JSON peut-etre incomplet, decodee aussi
- * loin qu'elle se lit. Vide tant que le champ n'a pas commence.
+ * Les valeurs du champ `key` dans un JSON peut-etre incomplet, decodees aussi
+ * loin qu'elles se lisent et recollees. Vide tant que le champ n'a pas
+ * commence.
+ *
+ * Toutes les occurrences et non la premiere, parce que le brouillon depose un
+ * tableau de passages : la cle y revient une fois par passage, et n'en montrer
+ * qu'une donnerait a voir le premier paragraphe d'une note qui en compte dix,
+ * puis plus rien pendant que le reste s'ecrit. Sur les outils a valeur unique,
+ * la boucle trouve une seule valeur et se comporte comme avant.
  */
 export function draftText(partialJson: string, key: string): string {
-  const opening = new RegExp(`"${key}"\\s*:\\s*"`).exec(partialJson)
-  if (!opening) return ''
+  const parts: string[] = []
+  const pattern = new RegExp(`"${key}"\\s*:\\s*"`, 'g')
 
+  let opening = pattern.exec(partialJson)
+  while (opening) {
+    const value = readString(partialJson, opening.index + opening[0].length)
+    parts.push(value.text)
+    // La recherche reprend apres la valeur lue, jamais dedans : un texte de
+    // note qui contiendrait lui-meme `"contenu":"` ouvrirait sinon un passage
+    // fantome au milieu du precedent. C'est bien le decalage *brut* qu'on
+    // reprend, celui que `readString` a atteint : la longueur du texte decode
+    // serait plus courte des qu'une echappement s'y trouve — un saut de ligne
+    // occupe deux caracteres dans le JSON et un seul apres lecture —, et la
+    // recherche repartirait au milieu de la valeur qu'elle vient de lire.
+    pattern.lastIndex = value.end
+    opening = pattern.exec(partialJson)
+  }
+
+  return parts.join('\n\n')
+}
+
+/**
+ * Une chaine JSON lue a partir de `from`, aussi loin qu'elle se decode : le
+ * texte obtenu, et l'endroit du JSON brut ou la lecture s'est arretee.
+ */
+function readString(partialJson: string, from: number): { text: string; end: number } {
   let out = ''
-  let at = opening.index + opening[0].length
+  let at = from
 
   while (at < partialJson.length) {
     const char = partialJson[at]
@@ -89,5 +121,5 @@ export function draftText(partialJson: string, key: string): string {
     at += 2
   }
 
-  return out
+  return { text: out, end: at }
 }

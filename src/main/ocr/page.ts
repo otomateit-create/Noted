@@ -113,7 +113,63 @@ async function readJob(png: Buffer, job: Job, options: PageOptions): Promise<str
   if (job.kind === 'title') return heading(text)
   if (job.kind === 'formula') return formula(text)
   if (job.kind === 'table') return table(text)
-  return text
+  return paragraphs(text)
+}
+
+/**
+ * Rend a un bloc de texte la forme que le Markdown attend.
+ *
+ * Traduit de `_format_content`, branche texte, de la chaine officielle
+ * (`glmocr/postprocess/result_formatter.py`). Ce que le modele rend est du
+ * texte de page, pas du Markdown : les puces y sont des points mediands, les
+ * paragraphes des sauts de ligne simples. Sans ce passage, l'editeur — qui lit
+ * du Markdown standard, sauts simples ecrases — recolle tout en un seul pave
+ * aligne a gauche. C'etait la moitie du defaut de structure.
+ *
+ * **Deux regles de la reference ne sont pas reprises**, et c'est delibere :
+ *
+ *   - la numerotation `1.texte` → `1. texte`. Elle abime les numeros a points
+ *     multiples, et la reference en porte la preuve dans ses propres sorties
+ *     d'exemple : `examples/result/page/page.md` y montre « 7.4.1 » devenu
+ *     « 7. 4.1 ». Sur un cours de finance, « 1.5x EBITDA » subirait le meme
+ *     sort ;
+ *   - la reinsertion d'une puce manquante d'apres l'alignement a gauche des
+ *     blocs voisins. Elle demande les boites des trois blocs a la fois, ce qui
+ *     n'est pas la forme de ce fichier.
+ *
+ * Rien ici ne s'applique aux tableaux ni aux formules : doubler les sauts de
+ * ligne d'un tableau Markdown le couperait en lignes isolees, et d'un bloc
+ * `$$…$$` le casserait. La reference fait la meme reserve.
+ */
+function paragraphs(text: string): string {
+  // Un bloc de code garde ses sauts de ligne tels quels, et rien d'autre ne le
+  // concerne : ni les puces, ni la ponctuation, ni surtout le doublement des
+  // sauts, qui aere du texte mais disloque du code. La reference applique
+  // pourtant sa branche texte entiere ici, bloc de code compris — verifie, et
+  // c'est une erreur qu'on ne recopie pas. Seule la fermeture manquante est
+  // rendue : sans elle, le plafond de jetons atteint en plein bloc ferait
+  // passer tout le reste du cours pour du code.
+  if (text.startsWith('```')) return text.endsWith('```') ? text : `${text}\n\`\`\``
+
+  let content = text
+
+  // Une puce de page — point median, gros point, asterisque — est une puce de
+  // liste, mais Markdown ne le sait pas.
+  content = content.replace(/^[·•]\s*/, '- ').replace(/^\*\s+/, '- ')
+
+  // « (1)Le premier point » : la parenthese numerotante veut son espace.
+  content = content.replace(/^([(（])(\d+|[A-Za-z])([)）])\s*/, '($2) ')
+
+  // Les suites de points, de points medians et de tirets bas sont des
+  // conducteurs de sommaire que le modele recopie a l'infini.
+  content = content
+    .replace(/\.{3,}/g, '...')
+    .replace(/·{3,}/g, '···')
+    .replace(/_{3,}/g, '___')
+
+  // Le coeur du correctif : un saut de ligne simple ne separe rien aux yeux de
+  // Markdown, il faut deux.
+  return content.replace(/(?<!\n)\n(?!\n)/g, '\n\n')
 }
 
 function task(kind: JobKind): 'text' | 'table' | 'formula' {
@@ -274,7 +330,7 @@ async function figure(crop: Buffer): Promise<string | null> {
   if (!name) return null
 
   const read = await readImage(crop)
-  const text = read?.markdown.replace(/\s+/g, ' ').trim() ?? ''
+  const text = read?.markdown.trim() ?? ''
 
   const image = `![Schéma](noted-media://${name})`
   return text ? `${image}\n\n${text}` : image
@@ -292,7 +348,7 @@ async function figure(crop: Buffer): Promise<string | null> {
 async function labels(crop: Buffer): Promise<string | null> {
   const read = await readImage(crop)
   if (!read) return null
-  return read.markdown.replace(/\s+/g, ' ').trim()
+  return paragraphs(read.markdown.trim())
 }
 
 /**

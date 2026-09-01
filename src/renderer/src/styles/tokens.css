@@ -110,9 +110,9 @@
      gestes : un fond transparent (le bureau se voit a travers), un flou
      d'arriere-plan qui depolit ce qui passe derriere, et des ombres vers
      l'interieur — l'arete qui accroche la lumiere en haut, la courbure qui
-     s'assombrit en bas. Le flou n'existe qu'a proportion de ce qu'il y a a
-     flouter : le bureau porte pour cela de discretes nappes de couleur
-     (app.css). Au survol, seule l'ombre portee respire.
+     s'assombrit en bas. Le bureau est un aplat (app.css) : le flou ne fait
+     donc qu'eclaircir ce qu'il depolit. Au survol, seule l'ombre portee
+     respire.
 
      L'ecart (--hub-gap) est repris en dur dans main/ipc.ts pour recentrer
      les feux macOS dans la pilule : toute modification se fait des deux

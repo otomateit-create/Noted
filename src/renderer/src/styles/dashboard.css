@@ -1,9 +1,8 @@
 /*
  * Tableau de bord — la coque d'accueil.
  *
- * Les cartes de matieres elles-memes sont des cartes 3D (components/ui/
- * animated-3d-card.tsx) stylees en Tailwind : ici ne restent que le cadre de
- * la page et l'ecran de premier lancement.
+ * Les cartes de matieres (SubjectCard.tsx) sont du papier teinte translucide :
+ * ici vivent leur robe, le cadre de la page et l'ecran de premier lancement.
  */
 
 /* Le verre est porte par le shell .hub-main (hub.css) : ici, la page n'est
@@ -59,4 +58,217 @@
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--shell-text-ghost);
+}
+
+/* --- La carte de matiere ---------------------------------------------------
+   Une seule teinte par matiere (--h, un angle oklch) ; le papier, le filet, le
+   symbole et l'encre du titre en sont derives en ne faisant varier que la
+   luminosite et la chroma. Le papier est translucide : la plaque et son
+   papier pointille se voient a travers, un peu plus au repos, un peu moins
+   sous la souris, ou la carte se releve et s'eclaircit. */
+
+/* Le socle : immobile, de la taille de la carte au repos. C'est lui qui ecoute
+   la souris (SubjectCard.tsx) ; la carte bascule dedans, et le deborde un peu
+   quand elle se releve. */
+.subject-card-slot {
+  position: relative;
+  height: 208px;
+}
+
+.subject-card {
+  --h: 150;
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 22px 24px;
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  font-family: var(--font-system);
+  background: oklch(0.965 0.03 var(--h) / 0.52);
+  border: 1px solid oklch(0.55 0.1 var(--h) / 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 1px 2px rgba(74, 58, 33, 0.05),
+    0 10px 22px -14px rgba(74, 58, 33, 0.22);
+  color: oklch(0.36 0.06 var(--h));
+  /* Un calque a echelle fixe : pendant l'inclinaison, le texte et les symboles
+     sont transformes par le compositeur, jamais redessines. Sans cela, chaque
+     image les re-rasterisait a une echelle un peu differente et les traits
+     tremblaient. */
+  will-change: transform;
+  transition:
+    box-shadow 450ms var(--spring),
+    background-color 300ms var(--swift);
+}
+
+.subject-card:hover {
+  background: oklch(0.965 0.03 var(--h) / 0.64);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 2px 4px rgba(74, 58, 33, 0.06),
+    0 22px 36px -16px oklch(0.45 0.1 var(--h) / 0.5);
+}
+
+/* Le reflet : le calque interieur est clippe a la carte, la bande qu'il
+   contient la deborde de partout pour pouvoir la balayer d'un bord a l'autre. */
+.subject-card-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.subject-card-sheen-band {
+  position: absolute;
+  inset: -100%;
+  background: linear-gradient(135deg, transparent 40%, rgba(255, 255, 255, 0.55) 50%, transparent 60%);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.subject-card-top {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.subject-card-icon {
+  color: oklch(0.52 0.1 var(--h));
+}
+
+/* Le symbole est dessine au trait 1,6 (subject-theme.tsx) pour les cartes
+   sombres d'avant ; sur du papier clair, un trait fin suffit et respire. */
+.subject-card-icon svg {
+  display: block;
+  width: 30px;
+  height: 30px;
+  stroke-width: 0.85;
+}
+
+.subject-card-pulse {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: oklch(0.6 0.11 var(--h));
+  box-shadow: 0 0 0 3px oklch(0.6 0.11 var(--h) / 0.22);
+}
+
+.subject-card-pulse-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: oklch(0.6 0.11 var(--h));
+}
+
+.subject-card-body {
+  position: relative;
+}
+
+.subject-card-title {
+  margin: 0 0 5px;
+  font-size: 20px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: oklch(0.27 0.07 var(--h));
+}
+
+.subject-card-description {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: oklch(0.46 0.05 var(--h));
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.subject-card-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: oklch(0.4 0.08 var(--h));
+}
+
+.subject-card-open-dash {
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+/* --- La carte neuve --------------------------------------------------------
+   La meme robe, sans le mouvement : on y ecrit un nom, et la teinte suit. */
+
+.subject-card--draft {
+  cursor: text;
+}
+
+.subject-card-input {
+  width: 100%;
+  background: transparent;
+  font-size: 20px;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: oklch(0.27 0.07 var(--h));
+  user-select: text;
+  cursor: text;
+}
+
+.subject-card-input::placeholder {
+  color: oklch(0.55 0.05 var(--h) / 0.7);
+}
+
+.subject-card-hint {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: oklch(0.46 0.05 var(--h));
+}
+
+.subject-card-hint--error {
+  color: var(--shell-danger);
+}
+
+/* --- Nouvelle matiere ----------------------------------------------------- */
+
+.home-new {
+  width: 100%;
+  height: 208px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-radius: 16px;
+  border: 1px dashed var(--shell-line-strong);
+  color: var(--shell-text-dim);
+  font-size: 13.5px;
+  transition:
+    border-color var(--fast) var(--swift),
+    background-color var(--fast) var(--swift),
+    color var(--fast) var(--swift);
+}
+
+.home-new:hover {
+  border-color: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.022);
+  color: var(--shell-text-mid);
+}
+
+.home-new svg {
+  width: 24px;
+  height: 24px;
 }

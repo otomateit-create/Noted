@@ -24,6 +24,7 @@ import type {
   CompactOutcome,
   CourseMove,
   DocxDocument,
+  CoursePreview,
   ExtractedCourse,
   ImportResult,
   MemoryEntry,
@@ -58,10 +59,10 @@ const api: NotedApi = {
     listSubjects: (): Promise<Subject[]> => ipcRenderer.invoke(CHANNELS.vaultListSubjects),
     reveal: (target: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.vaultReveal, target),
-    importCourses: (subject: string): Promise<ImportResult> =>
-      ipcRenderer.invoke(CHANNELS.vaultImportCourses, subject),
-    importPaths: (paths: string[], subject: string): Promise<ImportResult> =>
-      ipcRenderer.invoke(CHANNELS.vaultImportPaths, paths, subject),
+    importCourses: (subject: string, folder?: string | null): Promise<ImportResult> =>
+      ipcRenderer.invoke(CHANNELS.vaultImportCourses, subject, folder ?? null),
+    importPaths: (paths: string[], subject: string, folder?: string | null): Promise<ImportResult> =>
+      ipcRenderer.invoke(CHANNELS.vaultImportPaths, paths, subject, folder ?? null),
     createSubject: (name: string): Promise<string> =>
       ipcRenderer.invoke(CHANNELS.vaultCreateSubject, name),
     renameSubject: (name: string, title: string): Promise<{ name: string; moved: CourseMove[] }> =>
@@ -93,8 +94,8 @@ const api: NotedApi = {
   course: {
     rename: (courseId: string, title: string): Promise<string> =>
       ipcRenderer.invoke(CHANNELS.courseRename, courseId, title),
-    move: (courseId: string, subject: string): Promise<string> =>
-      ipcRenderer.invoke(CHANNELS.courseMove, courseId, subject),
+    move: (courseId: string, subject: string, folder?: string | null): Promise<string> =>
+      ipcRenderer.invoke(CHANNELS.courseMove, courseId, subject, folder ?? null),
     remove: (courseId: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.courseDelete, courseId),
     readBytes: (courseId: string): Promise<Uint8Array> =>
@@ -106,7 +107,11 @@ const api: NotedApi = {
     readExtraction: (courseId: string): Promise<ExtractedCourse | null> =>
       ipcRenderer.invoke(CHANNELS.courseReadExtraction, courseId),
     cacheExtraction: (extracted: ExtractedCourse): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.courseCacheExtraction, extracted)
+      ipcRenderer.invoke(CHANNELS.courseCacheExtraction, extracted),
+    readPreview: (courseId: string): Promise<CoursePreview | null> =>
+      ipcRenderer.invoke(CHANNELS.coursePreviewRead, courseId),
+    cachePreview: (courseId: string, preview: CoursePreview): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.coursePreviewCache, courseId, preview)
   },
 
   notes: {

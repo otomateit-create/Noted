@@ -44,8 +44,20 @@ const LLAMA_BUILD = 'b10453'
  * l'empreinte, et changer de quantisation invalide donc tout ce qui a ete lu
  * avec la precedente. Sans cela, on relirait des resultats calcules par un autre
  * modele en les croyant comparables.
+ *
+ * **Le suffixe doit bouger a chaque fois que la lecture change**, et pas
+ * seulement quand le modele change — c'est le point qui a failli faire passer
+ * les correctifs pour inoperants. La clef du cache est l'empreinte des pixels
+ * plus cette chaine : relever le plafond de jetons, ajouter la penalite de
+ * repetition ou reformater le texte ne touche ni l'une ni l'autre, et tous les
+ * cours deja convertis auraient continue de servir leurs anciennes lectures
+ * tronquees.
+ *
+ * `pages200` : pages dessinees a deux cents points par pouce et non plus
+ * soixante-douze, regions lues une par une, `max_tokens` a 8 192, penalite de
+ * repetition a 1,1, et post-traitement du texte.
  */
-export const OCR_MODEL = 'ggml-org/GLM-OCR-GGUF@Q8_0+regions1'
+export const OCR_MODEL = 'ggml-org/GLM-OCR-GGUF@Q8_0+pages200'
 
 interface Asset {
   /** Nom du fichier une fois installe. */
@@ -86,8 +98,8 @@ const BASE = 'https://huggingface.co/ggml-org/GLM-OCR-GGUF/resolve/main'
  * decrit une chaine en deux temps — reperer les regions, puis lire chacune avec
  * la tache qui lui convient — et explique pourquoi. Un modele de cette taille
  * « est tres sujet aux hallucinations et a la generation repetitive sur les
- * mises en page complexes ». C'est exactement la panne que `degenerate()`
- * rattrapait apres coup ; ce fichier la fait disparaitre avant.
+ * mises en page complexes ». C'est exactement la panne que `untangle()`
+ * rattrape apres coup ; ce fichier la fait disparaitre avant.
  *
  * DocLayout-YOLO plutot que PP-DocLayout-V3, qui est le detecteur officiel de
  * la chaine GLM-OCR : celui-ci vit dans PaddlePaddle, quand celui-la est publie

@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { fitToPageBudget, type CourseMove } from '@shared/types'
+import { OCR_PAGE_DPI, fitToPageBudget, type CourseMove } from '@shared/types'
 import { renderPage } from '../lib/pdf'
 
 /** D'ou viennent les pages a lire. */
@@ -51,11 +51,22 @@ export interface ConversionChoice {
 }
 
 /**
- * Dessine une page a la taille que le moteur de lecture accepte.
+ * Dessine une page a la resolution pour laquelle le moteur est calibre.
  *
- * Le budget porte sur la **surface** : c'est elle qui decide de la memoire que
- * l'encodeur visuel reclamera, et un plafond sur un seul cote laisse passer des
- * images bien trop grandes des que le format s'ecarte du portrait.
+ * **Deux cents points par pouce, et non soixante-douze.** C'est le correctif le
+ * plus important de cette chaine, et il tenait a une ligne : la page partait
+ * jusqu'ici a `viewport.width`, c'est-a-dire a sa largeur **en points PostScript**
+ * — 595 pour une A4. `fitToPageBudget` ne sachant que reduire, rien ne la
+ * relevait, et le canvas tombait exactement sur la taille en points du document.
+ * Le modele recevait donc une A4 en 595 × 842, ou un caractere de corps fait une
+ * dizaine de pixels de haut et ou les traits fins passent sous le pixel. La
+ * chaine officielle dessine la meme page en 1654 × 2339 : sept fois et demie
+ * plus de surface.
+ *
+ * Le budget garde le dernier mot, et il porte sur la **surface** : c'est elle
+ * qui decide du travail demande a l'encodeur visuel, et un plafond sur un seul
+ * cote laisserait passer des images demesurees des que le format s'ecarte du
+ * portrait.
  */
 export async function pageToPng(
   document: PDFDocumentProxy,
@@ -65,11 +76,17 @@ export async function pageToPng(
 
   try {
     const viewport = page.getViewport({ scale: 1 })
+
+    // Les dimensions d'un PDF sont en points PostScript, soit soixante-douze au
+    // pouce : c'est ce rapport qui convertit une page en pixels a la resolution
+    // voulue.
+    const dpi = OCR_PAGE_DPI / 72
+
     // Au budget de **page** et non a celui d'une image : cette page sera
     // decoupee en regions dans le processus principal, et chaque region y
     // gagne la resolution que la page entiere lui aurait prise. La reduire ici
     // au plafond d'une image reviendrait a decouper dans une image deja perdue.
-    const fitted = fitToPageBudget(viewport.width, viewport.height)
+    const fitted = fitToPageBudget(Math.round(viewport.width * dpi), Math.round(viewport.height * dpi))
 
     // `renderPage` peint a la densite de l'ecran — c'est ce qu'il faut a
     // l'affichage, ou une page rendue a la moitie des pixels serait floue sur

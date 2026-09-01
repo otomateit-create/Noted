@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import matter from 'gray-matter'
 import type { Course, CourseFormat, Subject, VaultPaths } from '../shared/types'
 
 /**
@@ -52,6 +53,7 @@ export function vaultPaths(): VaultPaths {
     flashcards: path.join(VAULT_ROOT, 'Flashcards'),
     prompts: path.join(VAULT_ROOT, 'Prompts'),
     originals: path.join(VAULT_ROOT, 'Originaux'),
+    drafts: path.join(VAULT_ROOT, 'Brouillons'),
     internal: path.join(VAULT_ROOT, '.noted')
   }
 }
@@ -70,6 +72,9 @@ le versionner, ou le lire dans n'importe quel éditeur.
                   ces fichiers qui tournent, modifiables ici ou depuis l'écran
                   Paramètres de l'application
     Memoire/      ce que l'IA retient de toi et de chaque matière
+    Brouillons/   ce que l'assistant écrit avant que cela n'entre dans tes
+                  notes, avec la page ou la section dont chaque passage parle ;
+                  vidé dès que le passage est posé
     Originaux/    les documents scannés et les photos que Noted a reconstitués
                   en texte — l'original n'est jamais supprimé
     .noted/       cache technique de l'application — sans intérêt à la lecture
@@ -133,6 +138,7 @@ export async function ensureVault(): Promise<VaultPaths> {
   await fs.mkdir(paths.memory, { recursive: true })
   await fs.mkdir(paths.annotations, { recursive: true })
   await fs.mkdir(paths.flashcards, { recursive: true })
+  await fs.mkdir(paths.drafts, { recursive: true })
   // Les fichiers eux-memes sont ecrits par prompts/store.ts, appele juste
   // apres : le vault ne connait pas les agents, il ne fait que la place.
   await fs.mkdir(paths.prompts, { recursive: true })
@@ -191,6 +197,26 @@ export function resolveNotePath(courseId: string): string {
   const notesRoot = vaultPaths().notes
   const resolved = path.resolve(notesRoot, `${withoutExtension}.md`)
   const relative = path.relative(notesRoot, resolved)
+
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`Identifiant de cours hors du vault : ${courseId}`)
+  }
+  return resolved
+}
+
+/**
+ * Chemin du brouillon d'un cours : meme arborescence, sous Brouillons/.
+ *
+ * A cote de Notes/ et non dedans, ou Obsidian et le compte de notes du bureau
+ * prendraient le brouillon pour une note de plus. Et hors de `.noted/`, qui
+ * est du cache jetable : un brouillon en attente est du texte ecrit, et le
+ * perdre perdrait le travail d'un tour.
+ */
+export function resolveDraftPath(courseId: string): string {
+  const withoutExtension = courseId.replace(/\.[^./]+$/, '')
+  const draftsRoot = vaultPaths().drafts
+  const resolved = path.resolve(draftsRoot, `${withoutExtension}.md`)
+  const relative = path.relative(draftsRoot, resolved)
 
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error(`Identifiant de cours hors du vault : ${courseId}`)
@@ -274,6 +300,24 @@ export function resolveSubjectPath(name: string): string {
   return target
 }
 
+/**
+ * Dossier de classement dans une matiere : `Cours/<matiere>/<dossier>`.
+ *
+ * Son nom vient de l'utilisateur, et un « ../ » ne doit pas pouvoir faire
+ * ecrire ailleurs — meme verification que pour une matiere. Un seul niveau est
+ * accepte a la creation : au-dela, un classement cesse d'aider a retrouver.
+ * Le listage, lui, reste recursif — un dossier creuse a la main dans le Finder
+ * continue de s'ouvrir.
+ */
+export function resolveFolderPath(subject: string, folder: string): string {
+  const subjectRoot = resolveSubjectPath(subject)
+  const target = path.resolve(subjectRoot, folder)
+
+  assertInside(subjectRoot, target, 'Dossier')
+  if (path.dirname(target) !== subjectRoot) throw new Error(`Nom de dossier invalide : ${folder}`)
+  return target
+}
+
 /** Dossier de notes d'une matiere, meme arborescence que sous Cours/. */
 export function resolveSubjectNotesPath(name: string): string {
   const notesRoot = vaultPaths().notes
@@ -326,20 +370,45 @@ function toTitle(fileName: string): string {
     .trim()
 }
 
+/**
+ * Un cours est-il annote ? Le fichier existe ne suffit pas a repondre : vider
+ * une note ne l'efface pas du disque, `writeNote` en reecrit toujours le
+ * frontmatter. Un fichier reduit a ses metadonnees n'est plus une note, et la
+ * pastille de la page de matiere ne doit pas continuer a en annoncer une.
+ *
+ * La fonction vit ici, aupres de `readCourse` qui l'appelle, et non dans
+ * notes.ts qui serait son voisinage naturel : notes.ts importe deja ce
+ * module, l'inverse fermerait le cercle.
+ */
+export async function noteHasContent(courseId: string): Promise<boolean> {
+  try {
+    const raw = await fs.readFile(resolveNotePath(courseId), 'utf8')
+    return matter(raw).content.trim().length > 0
+  } catch {
+    return false
+  }
+}
+
 async function readCourse(absolutePath: string, subject: string): Promise<Course | null> {
   const format = COURSE_EXTENSIONS[path.extname(absolutePath).toLowerCase()]
   if (!format) return null
 
   const stats = await fs.stat(absolutePath)
   const id = toCourseId(absolutePath)
+  const notePath = resolveNotePath(id)
+  // « Private Equity/HEC/lbo.pdf » : la matiere en tete, le fichier en queue, le
+  // classement au milieu. Rien au milieu veut dire un cours pose a la racine.
+  const segments = id.split('/')
 
   return {
     id,
     title: toTitle(path.basename(absolutePath)),
     subject,
+    folder: segments.length > 2 ? segments.slice(1, -1).join('/') : null,
     format,
     path: absolutePath,
-    notePath: resolveNotePath(id),
+    notePath,
+    hasNote: await noteHasContent(id),
     sizeBytes: stats.size,
     modifiedAt: stats.mtimeMs,
     // APFS date les naissances de fichier ; d'autres systemes rendent zero.
@@ -453,9 +522,21 @@ export async function readCourseBytes(courseId: string): Promise<Uint8Array> {
   return new Uint8Array(buffer)
 }
 
-/** Copie un fichier dans une matiere du vault. Renvoie le nouvel identifiant. */
-export async function importCourseFile(sourcePath: string, subject: string): Promise<string> {
-  const destinationDir = path.join(vaultPaths().courses, subject)
+/**
+ * Copie un fichier dans une matiere du vault, eventuellement dans un de ses
+ * dossiers de classement. Renvoie le nouvel identifiant.
+ *
+ * Le dossier est cree s'il manque : c'est ainsi qu'on en fabrique un, plutot
+ * que par un geste separe qui laisserait des dossiers vides derriere lui.
+ */
+export async function importCourseFile(
+  sourcePath: string,
+  subject: string,
+  folder?: string | null
+): Promise<string> {
+  const destinationDir = folder
+    ? resolveFolderPath(subject, cleanName(folder, 'au dossier'))
+    : path.join(vaultPaths().courses, subject)
   await fs.mkdir(destinationDir, { recursive: true })
 
   const fileName = path.basename(sourcePath)
@@ -472,7 +553,7 @@ export async function importCourseFile(sourcePath: string, subject: string): Pro
     if (existing.replace(/\.[^./]+$/, '').toLowerCase() !== stem) continue
     if (!COURSE_EXTENSIONS[path.extname(existing).toLowerCase()]) continue
     throw new Error(
-      `« ${existing} » existe déjà dans ${subject} : deux cours de même nom partageraient la même note. Renomme l'un des deux.`
+      `« ${existing} » existe déjà dans ${folder ? `${subject}/${folder}` : subject} : deux cours de même nom partageraient la même note. Renomme l'un des deux.`
     )
   }
   await fs.copyFile(sourcePath, destination)

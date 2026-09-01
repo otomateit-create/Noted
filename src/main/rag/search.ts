@@ -69,8 +69,15 @@ export function tokenise(text: string): string[] {
   return tokens
 }
 
-/** Forme comparable d'un titre : replie, sans ponctuation, espaces resserres. */
-function foldHeading(text: string): string {
+/**
+ * Forme comparable d'un titre : replie, sans ponctuation, espaces resserres.
+ *
+ * Exportee pour que la portee declaree par l'assistant (`declaredScope`) juge
+ * un titre exactement comme `index.section` le juge : l'assistant recopie dans
+ * une note la meme chaine qu'il donne a « lire », et un titre accepte a la
+ * lecture doit rester accepte a l'ecriture.
+ */
+export function foldHeading(text: string): string {
   return fold(text)
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .replace(/\s+/g, ' ')

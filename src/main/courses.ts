@@ -27,6 +27,7 @@ import { deleteAnnotations, moveAnnotations } from './annotations'
 import { forgetSession, renameSession } from './claude/session'
 import { deleteFlashcards, moveFlashcards } from './flashcards/store'
 import { deleteExtraction, renameExtraction } from './extraction-cache'
+import { deletePreview, renamePreview } from './preview-cache'
 import {
   deleteCourseMemory,
   deleteSubjectMemory,
@@ -34,6 +35,7 @@ import {
   moveSubjectMemory
 } from './memory/entries'
 import { invalidateMemoryIndex } from './memory/rag'
+import { clearDraft, moveDraft } from './notes-draft'
 import { deleteNoteBackup, moveNoteBackup } from './notes'
 import { forgetCourse, renameCourse as renameIndexedCourse } from './rag/store'
 import { deleteVectors, renameVectors } from './rag/vector-cache'
@@ -44,9 +46,11 @@ import {
   resolveCoursePath,
   resolveNotePath,
   resolveSubjectAnnotationsPath,
+  resolveFolderPath,
   resolveSubjectFlashcardsPath,
   resolveSubjectNotesPath,
-  resolveSubjectPath
+  resolveSubjectPath,
+  vaultPaths
 } from './vault'
 
 /**
@@ -80,6 +84,32 @@ async function relocate(courseId: string, nextId: string): Promise<string> {
 }
 
 /**
+ * Retire les dossiers de classement que le depart du cours vient de vider.
+ *
+ * Ranger un cours dans « HEC » creuse un « HEC » dans les cinq arbres du vault
+ * a la fois — Cours/, Notes/, Annotations/, Flashcards/, Memoire/ — puisque
+ * tous se calquent sur le chemin du cours. Le dernier cours qui en sort doit
+ * donc les defaire tous les cinq, sans quoi l'application ne montrerait plus le
+ * dossier (elle ne les connait que par les cours qu'ils contiennent) mais le
+ * Finder et Obsidian le garderaient sous les yeux, vide.
+ *
+ * Ne touche jamais au dossier d'une matiere : il faut au moins deux segments —
+ * `matiere/dossier` — pour qu'il y ait un classement a defaire. Une matiere
+ * sans cours reste une matiere, c'est ce qui permet d'en preparer une.
+ */
+async function pruneEmptyFolders(courseId: string): Promise<void> {
+  const relative = path.posix.dirname(courseId)
+  if (relative.split('/').length < 2) return
+
+  const paths = vaultPaths()
+  for (const root of [paths.courses, paths.notes, paths.annotations, paths.flashcards, paths.memory]) {
+    // `rmdir` echoue de lui-meme sur un dossier non vide : c'est exactement la
+    // condition voulue, et la verifier a part laisserait une course entre les deux.
+    await fs.rmdir(path.join(root, relative)).catch(() => undefined)
+  }
+}
+
+/**
  * Fait suivre tout ce qui vit ailleurs mais porte l'identifiant du cours : sa
  * note, ses surlignages, ses vecteurs, sa place dans l'index et sa conversation.
  *
@@ -104,11 +134,18 @@ export async function moveCourseAnnexes(courseId: string, nextId: string): Promi
   await moveFlashcards(courseId, nextId)
   await renameVectors(courseId, nextId)
   await renameExtraction(courseId, nextId)
+  await renamePreview(courseId, nextId)
   await moveNoteBackup(courseId, nextId)
+  await moveDraft(courseId, nextId)
   await moveCourseMemory(courseId, nextId)
   invalidateMemoryIndex()
   renameIndexedCourse(courseId, nextId)
   renameSession(courseId, nextId)
+
+  // En dernier, quand tout a bouge : ce qui reste vide n'attend plus personne.
+  // Sans effet quand le document n'a pas suivi — une conversion par OCR laisse
+  // l'ancien dossier occupe, et `rmdir` ne fait rien d'un dossier plein.
+  await pruneEmptyFolders(courseId)
 }
 
 /** Renomme un cours sans changer de matiere. L'extension ne se touche pas. */
@@ -122,17 +159,34 @@ export async function renameCourse(courseId: string, title: string): Promise<str
 }
 
 /**
- * Deplace un cours dans une autre matiere. Il atterrit a la racine de celle-ci,
- * meme s'il vivait dans un sous-dossier : recreer une arborescence de classement
- * dans une matiere ou elle n'existe pas produirait des dossiers a un seul cours.
+ * Range un cours : dans une autre matiere, dans un dossier de classement, ou
+ * les deux. Tout ce qui porte son identifiant suit — c'est la difference entre
+ * ce geste et le meme fait depuis le Finder, qui laisserait sa note, ses
+ * surlignages, ses cartes et sa memoire a l'ancienne adresse.
+ *
+ * Sans dossier, le cours atterrit a la racine de la matiere, meme s'il vivait
+ * dans un sous-dossier : recreer une arborescence de classement dans une
+ * matiere ou elle n'existe pas produirait des dossiers a un seul cours.
  */
-export async function moveCourse(courseId: string, subject: string): Promise<string> {
+export async function moveCourse(
+  courseId: string,
+  subject: string,
+  folder?: string | null
+): Promise<string> {
   const clean = cleanName(subject, 'à la matière')
   if (!(await exists(resolveSubjectPath(clean)))) {
     throw new Error(`La matière « ${clean} » n'existe pas.`)
   }
 
-  return relocate(courseId, `${clean}/${path.posix.basename(courseId)}`)
+  const name = path.posix.basename(courseId)
+  if (!folder) return relocate(courseId, `${clean}/${name}`)
+
+  // Le dossier peut ne pas exister encore : c'est le geste qui le cree, comme
+  // a l'import. On ne demande pas de le preparer avant de s'en servir.
+  const cleanFolder = cleanName(folder, 'au dossier')
+  await fs.mkdir(resolveFolderPath(clean, cleanFolder), { recursive: true })
+
+  return relocate(courseId, `${clean}/${cleanFolder}/${name}`)
 }
 
 /** Envoie a la corbeille le document, sa note et ses surlignages, et efface le reste. */
@@ -147,7 +201,9 @@ export async function deleteCourse(courseId: string): Promise<void> {
   await deleteFlashcards(courseId)
   await deleteVectors(courseId)
   await deleteExtraction(courseId)
+  await deletePreview(courseId)
   await deleteNoteBackup(courseId)
+  await clearDraft(courseId)
   await deleteCourseMemory(courseId)
   invalidateMemoryIndex()
   forgetCourse(courseId)
@@ -228,6 +284,7 @@ export async function renameSubject(name: string, title: string): Promise<{
     // reperees par l'identifiant.
     await renameVectors(course.id, nextId)
     await renameExtraction(course.id, nextId)
+    await renamePreview(course.id, nextId)
     await moveNoteBackup(course.id, nextId)
     renameIndexedCourse(course.id, nextId)
     renameSession(course.id, nextId)
@@ -267,6 +324,7 @@ export async function deleteSubject(name: string): Promise<void> {
   for (const course of courses) {
     await deleteVectors(course.id)
     await deleteExtraction(course.id)
+    await deletePreview(course.id)
     await deleteNoteBackup(course.id)
     forgetCourse(course.id)
     forgetSession(course.id)

@@ -21,6 +21,7 @@ import TitleBar from './components/TitleBar'
 import { useVault } from './hooks/useVault'
 import { dispositionRetenue, retenirDisposition, type Panneaux } from './lib/layout'
 import { forgetReading, renameReading } from './lib/reading'
+import { assignSubjectHues, subjectHue } from './lib/subject-tint'
 import './styles/app.css'
 
 /** Bornes de redimensionnement : en deca, un panneau devient inutilisable. */
@@ -155,6 +156,12 @@ export default function App(): React.JSX.Element {
     [subjects, activeSubject]
   )
 
+  /** Une teinte par matiere, sans doublon : la carte et la page la partagent. */
+  const subjectHues = useMemo(
+    () => assignSubjectHues(subjects.map((subject) => subject.name)),
+    [subjects]
+  )
+
   // Lue une seule fois : ensuite c'est l'etat de React qui fait foi.
   const [disposition] = useState(dispositionRetenue)
   const [courseWidth, setCourseWidth] = useState(disposition.courseWidth)
@@ -208,6 +215,14 @@ export default function App(): React.JSX.Element {
    * document est mesure, et vider entre-temps ne ferait qu'ouvrir un trou.
    */
   const [visibleUnits, setVisibleUnits] = useState<string[]>([])
+  /**
+   * Les titres du cours affiche, dans l'ordre. Le panneau du cours les releve,
+   * celui des notes s'en sert d'echelle : une ancre de note nomme une section,
+   * et il faut cette liste pour savoir laquelle de deux sections vient avant
+   * l'autre. C'est ce qui permet aux notes de suivre le defilement du cours
+   * ailleurs que sur un document pagine.
+   */
+  const [sections, setSections] = useState<string[]>([])
   /** Ce que chaque panneau demande a l'autre de rejoindre. */
   const [courseGoTo, setCourseGoTo] = useState<{
     anchor: NoteAnchor
@@ -515,10 +530,22 @@ export default function App(): React.JSX.Element {
 
   const clearMention = useCallback(() => setChatMention(null), [])
 
+  /**
+   * Une proposition de l'assistant vient d'arriver dans le panneau des notes :
+   * s'il etait replie par le mode concentration ou decoche du bandeau,
+   * l'apercu resterait invisible et la conversation attendrait dans le vide.
+   * On rallume donc la feuille — ecrire dedans, c'est la montrer.
+   */
+  const revealNotes = useCallback(() => {
+    setPanneaux((current) => (current.notes ? current : { ...current, notes: true }))
+    setFocus((current) => (current === 'notes' ? current : null))
+  }, [])
+
   /** Une reponse de l'assistant recopiee dans la note, a sa place, sur clic explicite. */
   const insertResponse = useCallback((markdown: string) => {
+    revealNotes()
     setNoteInsert((previous) => ({ text: markdown, nonce: (previous?.nonce ?? 0) + 1 }))
-  }, [])
+  }, [revealNotes])
 
   /**
    * « Mets au propre mes notes » : la demande part a l'assistant, qui sait par
@@ -529,15 +556,6 @@ export default function App(): React.JSX.Element {
     setPanneaux((current) => ({ ...current, chat: true }))
     setFocus(null)
     setChatAsk({ prompt: 'Mets au propre mes notes de ce cours.' })
-  }, [])
-
-  /**
-   * Une proposition de l'assistant vient d'arriver dans le panneau des notes :
-   * s'il etait replie par le mode concentration, l'apercu resterait invisible
-   * et la conversation attendrait dans le vide.
-   */
-  const revealNotes = useCallback(() => {
-    setFocus((current) => (current === 'notes' ? current : null))
   }, [])
 
   /**
@@ -727,6 +745,7 @@ export default function App(): React.JSX.Element {
             onExplain={explainPassage}
             onReading={handleReading}
             onVisibleUnits={setVisibleUnits}
+            onSections={setSections}
             goTo={courseGoTo}
           onConverted={handleMoved}
           />
@@ -744,13 +763,20 @@ export default function App(): React.JSX.Element {
             <Splitter onResize={handlePartage} label="Partage entre le cours et l'assistant" />
           )}
 
-          {panneaux.notes && (
+          {/* La feuille ne se demonte pas quand on la decoche : elle est le seul
+              interlocuteur des outils d'ecriture de l'assistant, du ⌘S et de
+              l'insertion depuis le chat. Absente du DOM, ces gestes n'auraient
+              personne a qui parler — l'assistant attendrait dix minutes une
+              reponse qui ne viendrait jamais. Elle se replie par le style,
+              comme en mode concentration. */}
           <NotesPanel
+            hidden={!panneaux.notes}
             course={course}
             saveRequest={saveRequest}
             insert={noteInsert}
             reading={reading}
             visibleUnits={visibleUnits}
+            sections={sections}
             onGoTo={askCourse}
             onFollow={handleFollow}
             follow={notesFollow}
@@ -765,7 +791,6 @@ export default function App(): React.JSX.Element {
             onMention={mentionPassage}
             stageRef={setNotesStage}
           />
-          )}
 
           {panneaux.notes && panneaux.chat && (
             <Splitter onResize={handleChatResize} label="Largeur du panneau IA" />
@@ -807,6 +832,7 @@ export default function App(): React.JSX.Element {
             {shownView === 'subject' && activeSubjectData ? (
               <SubjectPage
                 subject={activeSubjectData}
+                hue={subjectHues.get(activeSubjectData.name) ?? subjectHue(activeSubjectData.name)}
                 onOpenCourse={openCourse}
                 onImported={refresh}
                 onMoved={handleMoved}
@@ -819,7 +845,12 @@ export default function App(): React.JSX.Element {
             ) : shownView === 'reglages' ? (
               <SettingsPage />
             ) : (
-              <Dashboard subjects={subjects} onOpenSubject={openSubject} onImported={refresh} />
+              <Dashboard
+                subjects={subjects}
+                hues={subjectHues}
+                onOpenSubject={openSubject}
+                onImported={refresh}
+              />
             )}
           </div>
         </div>

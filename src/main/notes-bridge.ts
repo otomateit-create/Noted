@@ -108,12 +108,22 @@ export function readLiveNote(courseId: string): Promise<string | null> {
 /**
  * Soumet une proposition d'ecriture a l'utilisateur et attend sa decision.
  * La promesse ne rejette jamais : toute issue est un statut.
+ *
+ * Elle commence par s'assurer qu'il y a quelqu'un au bout du fil. L'apercu
+ * part en `send` : s'il n'atteint aucun ecouteur — l'espace de travail quitte
+ * pour le tableau de bord, un autre cours charge — personne ne repondra, et
+ * l'appel d'outil resterait dix minutes en suspens, l'assistant « pense » a
+ * l'ecran et la note jamais ecrite. La lecture de la note vivante tranche en
+ * 1,5 s au pire, et sur exactement la meme condition que celle qui decide le
+ * panneau a repondre : nulle, c'est qu'il n'y a personne pour recevoir.
  */
-export function proposeNoteChange(
+export async function proposeNoteChange(
   proposal: Omit<NoteProposal, 'id'>
 ): Promise<NoteProposalOutcome> {
+  if ((await readLiveNote(proposal.courseId)) === null) return { status: 'not-open' }
+
   const target = window()
-  if (!target) return Promise.resolve({ status: 'not-open' })
+  if (!target) return { status: 'not-open' }
 
   const id = randomUUID()
   return new Promise((resolve) => {

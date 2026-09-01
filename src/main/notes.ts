@@ -73,8 +73,13 @@ export async function readNote(course: Course): Promise<Note> {
  * Ecrit la note sur disque, frontmatter regenere. L'ecriture passe par un
  * fichier temporaire puis un rename atomique : une sauvegarde interrompue ne
  * peut pas laisser une note tronquee.
+ *
+ * Rend vrai quand le cours vient de gagner ou de perdre sa note — le premier
+ * mot ecrit, le dernier efface. C'est le seul moment ou la pastille de la page
+ * de matiere doit changer d'avis, et Notes/ n'est pas surveille : sans ce
+ * retour, l'ecran ne l'apprendrait qu'au prochain remous dans Cours/.
  */
-export async function writeNote(course: Course, markdown: string): Promise<void> {
+export async function writeNote(course: Course, markdown: string): Promise<boolean> {
   const notePath = resolveNotePath(course.id)
   await fs.mkdir(path.dirname(notePath), { recursive: true })
 
@@ -91,7 +96,7 @@ export async function writeNote(course: Course, markdown: string): Promise<void>
     existing.markdown.trimEnd() === markdown.trimEnd() &&
     existing.frontmatter.cours === course.title &&
     existing.frontmatter.matiere === course.subject
-  if (unchanged) return
+  if (unchanged) return false
 
   const frontmatter: NoteFrontmatter = {
     ...existing.frontmatter,
@@ -105,6 +110,9 @@ export async function writeNote(course: Course, markdown: string): Promise<void>
 
   await fs.writeFile(temporary, serialised, 'utf8')
   await fs.rename(temporary, notePath)
+
+  const avait = existing.markdown.trim().length > 0
+  return avait !== markdown.trim().length > 0
 }
 
 /**

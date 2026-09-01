@@ -263,19 +263,18 @@ export function splitBlocks(markdown: string): string[] {
  * Les blocs devant lesquels un marqueur d'ancre sait se poser.
  *
  * Le miroir de `applyAnchors` cote renderer : a la relecture, un marqueur ne
- * devient attribut que colle a un paragraphe, un titre, une liste, une
- * citation ou un bloc de code. Devant tout le reste — tableau, schema,
- * encadre, HTML d'habillage — il resterait un commentaire orphelin que
- * l'editeur avale sans le rendre. Ces blocs-la relevent du bloc qui les
- * precede, exactement comme quand ils sortent de la main de l'utilisateur.
+ * devient attribut que colle a un bloc que l'editeur sait porter — paragraphe,
+ * titre, liste, citation, bloc de code, et desormais tableau, encadre et
+ * schema. Devant du HTML d'habillage, il resterait un commentaire orphelin que
+ * l'editeur avale sans le rendre : ces blocs-la relevent du bloc qui les
+ * precede.
  */
 export function anchorable(block: string): boolean {
-  const head = block.trimStart()
-  if (head.startsWith('<')) return false
-  if (head.startsWith('|')) return false
-  if (/^(?:`{3,}|~{3,})[ \t]*mermaid\b/i.test(head)) return false
-  if (/^>[ \t]*\[!/.test(head)) return false
-  return true
+  // Il ne reste que le HTML brut d'habillage : un `div` d'alignement, une
+  // balise recopiee d'une lecture. Ceux-la n'ont toujours pas de bloc
+  // d'editeur a eux, et un marqueur pose devant serait avale a la relecture.
+  // Le tableau, l'encadre et le schema, eux, en ont un depuis `ANCHORED`.
+  return !block.trimStart().startsWith('<')
 }
 
 /**

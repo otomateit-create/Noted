@@ -26,6 +26,7 @@ import type {
 } from '../../shared/types'
 import { hasMemoryInScope, recallSources } from '../memory/rag'
 import { cancelProposals, endNoteDrafts, showNoteDraft } from '../notes-bridge'
+import { postDraft } from '../notes-post'
 import { cancelQuizzes } from '../quiz-bridge'
 import { composePrompt } from '../prompts/store'
 import { indexCourse, indexedCourse } from '../rag/store'
@@ -264,6 +265,31 @@ export async function send(
     endNoteDrafts(courseId, null)
     if (session.active?.abort === abort) {
       session.active = undefined
+    }
+
+    /**
+     * Le brouillon oublie.
+     *
+     * L'assistant depose ses passages par `note_brouillon` et les pose par
+     * `note_poser` ; rien ne garantit qu'il appelle le second. Un tour peut
+     * finir sur une phrase de conclusion, sur une erreur du moteur, sur un
+     * plafond de tokens — et le travail d'ecriture d'un tour ne doit pas
+     * dependre de ce que le modele a pense a faire en dernier. On pose donc ce
+     * qui reste, ici, ou l'on passe quoi qu'il arrive.
+     *
+     * Sauf sur interruption : l'utilisateur a demande l'arret, et lui ecrire
+     * dans ses notes juste apres serait le contraire de ce qu'il a demande. Le
+     * brouillon reste alors sur le disque, lisible dans `Brouillons/`.
+     *
+     * Sans `await` : le tour est termine, `done` est deja parti, et faire
+     * attendre la fermeture du tour sur un aller-retour vers le panneau des
+     * notes n'apporterait rien. Une erreur ici ne doit rien casser non plus —
+     * le brouillon, lui, survit dans tous les cas.
+     */
+    if (!abort.signal.aborted) {
+      void postDraft(courseId).catch((cause) => {
+        console.warn(`[notes] pose du brouillon impossible pour ${courseId} :`, cause)
+      })
     }
   }
 }
@@ -523,8 +549,13 @@ function summariseToolCall(name: string, input: unknown): string {
       const section = text('section')
       return section ? `Lecture des notes · ${section}` : 'Lecture des notes'
     }
-    case 'mcp__cours__note_inserer':
-      return "Proposition d'ajout aux notes"
+    case 'mcp__cours__note_brouillon': {
+      const passages = fields['passages']
+      const count = Array.isArray(passages) ? passages.length : 0
+      return count > 1 ? `Écriture de notes · ${count} passages` : 'Écriture de notes'
+    }
+    case 'mcp__cours__note_poser':
+      return 'Ancrage et pose des notes'
     case 'mcp__cours__note_remplacer':
       return 'Proposition de retouche des notes'
     case 'mcp__cours__note_reecrire':

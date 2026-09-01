@@ -171,6 +171,16 @@ interface CoursePanelProps {
    */
   onVisibleUnits: (units: string[]) => void
   /**
+   * Les titres du document affiche, dans l'ordre ou il les presente.
+   *
+   * Le panneau des notes n'a pas le cours sous les yeux. Une ancre lui dit
+   * « section III.2 » et jamais si elle vient avant ou apres « section IV.1 » :
+   * cette liste est l'echelle qui lui manquait. Sans elle il ne savait ordonner
+   * que des numeros de page, et suivre le defilement du cours s'arretait aux
+   * PDF — un Word, un Markdown, un cours HTML n'entrainaient rien.
+   */
+  onSections: (titles: string[]) => void
+  /**
    * Ou le panneau des notes demande d'aller. `signal` dit si la demande attend
    * qu'on montre l'endroit — un clic sur un repere d'ancrage — ou si elle ne
    * fait que suivre le defilement, auquel cas rien ne doit se voir.
@@ -237,6 +247,7 @@ export default function CoursePanel({
   onExplain,
   onReading,
   onVisibleUnits,
+  onSections,
   goTo,
   onConverted
 }: CoursePanelProps): React.JSX.Element {
@@ -1204,6 +1215,32 @@ export default function CoursePanel({
   useEffect(() => {
     onVisibleUnits(visibleUnits)
   }, [visibleUnits, onVisibleUnits])
+
+  /**
+   * L'ordre des titres, releve une fois par document.
+   *
+   * Les memes que `sectionAtLine` parcourt, pris a la meme source et dans le
+   * meme ordre : c'est ce qui garantit qu'un titre annonce comme lieu de
+   * lecture se retrouve bien dans cette liste. Les titres vides y restent, a
+   * leur rang — ils ne designent rien, mais decaler les suivants les
+   * designerait mal.
+   *
+   * Le corps du document est une dependance a lui seul, et il le faut : d'un
+   * cours a l'autre React garde le meme conteneur et n'en remplace que le
+   * contenu, si bien que la reference ne bouge pas. S'y fier seule laisserait
+   * les titres du cours precedent servir d'echelle au suivant — les notes
+   * suivraient alors le defilement en se trompant d'endroit, ce qui est pire
+   * que de ne pas le suivre.
+   */
+  useEffect(() => {
+    onSections(
+      htmlRoot
+        ? Array.from(htmlRoot.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')).map(
+            (heading) => heading.textContent?.trim() ?? ''
+          )
+        : []
+    )
+  }, [htmlRoot, documentBody, onSections])
 
   // --- Ce que la synchronisation demande -----------------------------------
 

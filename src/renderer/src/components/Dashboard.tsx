@@ -1,31 +1,35 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Plus } from 'lucide-react'
 import type { Course, Subject } from '@shared/types'
 import { readableError } from '../lib/errors'
+import { subjectHue, type SubjectHue } from '../lib/subject-tint'
 import { detectSubjectTheme } from '../lib/subject-theme'
-import { Card3D, containerVariants, itemVariants } from './ui/animated-3d-card'
+import SubjectCard, { containerVariants, itemVariants } from './SubjectCard'
 import '../styles/dashboard.css'
 
 interface DashboardProps {
   subjects: Subject[]
+  /** La teinte de chaque matiere, attribuee sans doublon (subject-tint.ts). */
+  hues: Map<string, SubjectHue>
   onOpenSubject: (name: string) => void
   onImported: () => Promise<Subject[]>
 }
 
-/** Au-dela, la description deborderait des trois lignes que la carte lui laisse. */
+/** Au-dela, la description deborderait des deux lignes que la carte lui laisse. */
 const RECENT_LIMIT = 3
 
 /**
- * Ecran d'accueil : une carte 3D par matiere, colorée par sa thematique —
- * finance, marketing, IA, blockchain — detectee depuis le titre, avec le
- * symbole de la famille pose en haut a gauche.
+ * Ecran d'accueil : une carte de papier teinte par matiere — une teinte par
+ * matiere, tiree de son nom — avec le symbole de sa famille (finance,
+ * marketing, IA, blockchain) detectee depuis le titre.
  *
  * Ni index exhaustif (⌘K le fait deja), ni simple ecran de bienvenue : c'est
  * aussi ici qu'on atterrit au tout premier lancement, quand le vault est vide.
  */
 export default function Dashboard({
   subjects,
+  hues,
   onOpenSubject,
   onImported
 }: DashboardProps): React.JSX.Element {
@@ -54,19 +58,21 @@ export default function Dashboard({
           style={{ perspective: '1500px', transformStyle: 'preserve-3d' }}
         >
           {subjects.map((subject) => (
-            <SubjectCard3D key={subject.name} subject={subject} onOpenSubject={onOpenSubject} />
+            <SubjectTile
+              key={subject.name}
+              subject={subject}
+              hue={hues.get(subject.name) ?? subjectHue(subject.name)}
+              onOpenSubject={onOpenSubject}
+            />
           ))}
 
           <motion.div variants={itemVariants} style={{ transformStyle: 'preserve-3d' }}>
             {drafting ? (
               <DraftCard onDone={onImported} onClose={() => setDrafting(false)} />
             ) : (
-              <button
-                className="flex h-52 w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-black/15 text-[color:var(--shell-text-dim)] transition-colors duration-150 hover:border-black/25 hover:bg-black/[0.022] hover:text-[color:var(--shell-text-mid)]"
-                onClick={() => setDrafting(true)}
-              >
-                <Plus aria-hidden="true" className="h-6 w-6" />
-                <span className="text-[13.5px]">Nouvelle matière</span>
+              <button className="home-new" onClick={() => setDrafting(true)}>
+                <Plus aria-hidden="true" />
+                <span>Nouvelle matière</span>
               </button>
             )}
           </motion.div>
@@ -80,27 +86,25 @@ export default function Dashboard({
 // Une carte de matiere
 // ---------------------------------------------------------------------------
 
-function SubjectCard3D({
+function SubjectTile({
   subject,
+  hue,
   onOpenSubject
 }: {
   subject: Subject
+  hue: SubjectHue
   onOpenSubject: (name: string) => void
 }): React.JSX.Element {
   const theme = detectSubjectTheme(subject.name)
-  const description = useMemo(() => describe(subject.courses), [subject.courses])
 
   return (
     <motion.div variants={itemVariants} style={{ transformStyle: 'preserve-3d' }}>
-      <Card3D
+      <SubjectCard
         title={subject.name}
-        description={description}
+        description={describe(subject.courses)}
         icon={theme.icon}
-        gradient={theme.gradient}
-        variant="premium"
-        size="md"
-        className="h-52"
-        onClick={() => onOpenSubject(subject.name)}
+        hue={hue.hue}
+        onOpen={() => onOpenSubject(subject.name)}
       />
     </motion.div>
   )
@@ -129,9 +133,9 @@ function describe(courses: Course[]): string {
 
 /**
  * Pas un bouton qui se transforme en champ, mais la carte definitive posee
- * tout de suite, dont on ne remplit que le titre. La thematique suit la
- * saisie : taper « Corporate Finance » fait apparaitre les chandeliers et le
- * vert avant meme de valider.
+ * tout de suite, dont on ne remplit que le titre. La teinte et le symbole
+ * suivent la saisie : taper « Corporate Finance » fait apparaitre les
+ * chandeliers avant meme de valider.
  */
 function DraftCard({
   onDone,
@@ -149,7 +153,9 @@ function DraftCard({
     inputRef.current?.focus()
   }, [])
 
-  const theme = detectSubjectTheme(name.trim() || 'Nouvelle matiere')
+  const draftName = name.trim() || 'Nouvelle matiere'
+  const theme = detectSubjectTheme(draftName)
+  const hue = subjectHue(draftName)
 
   const submit = async (): Promise<void> => {
     const clean = name.trim()
@@ -168,14 +174,17 @@ function DraftCard({
 
   return (
     <div
-      className={`relative flex h-52 w-full flex-col justify-between overflow-hidden rounded-2xl bg-gradient-to-br p-6 text-white shadow-xl ring-1 ring-white/20 ${theme.gradient}`}
+      className="subject-card subject-card--draft"
+      style={{ '--h': hue.hue } as React.CSSProperties}
     >
-      <div className="opacity-90 drop-shadow-lg">{theme.icon}</div>
+      <div className="subject-card-top">
+        <div className="subject-card-icon">{theme.icon}</div>
+      </div>
 
-      <div className="space-y-3">
+      <div className="subject-card-body">
         <input
           ref={inputRef}
-          className="w-full cursor-text select-text bg-transparent text-xl font-semibold tracking-tight text-white placeholder:text-white/60 drop-shadow-md"
+          className="subject-card-input"
           value={name}
           disabled={busy}
           onChange={(event) => {
@@ -193,7 +202,7 @@ function DraftCard({
           aria-label="Nom de la nouvelle matière"
           aria-invalid={Boolean(error)}
         />
-        <p className={`text-sm leading-relaxed drop-shadow-sm ${error ? 'text-red-200' : 'text-white/85'}`}>
+        <p className={`subject-card-hint${error ? ' subject-card-hint--error' : ''}`}>
           {error ?? (busy ? 'Création…' : 'entrée pour valider, échap pour annuler')}
         </p>
       </div>

@@ -23,6 +23,9 @@ export const CHANNELS = {
   /** Le texte deja extrait de ce document, s'il n'a pas bouge depuis. */
   courseReadExtraction: 'course:read-extraction',
   courseCacheExtraction: 'course:cache-extraction',
+  /** L'apercu deja dessine de ce document, s'il n'a pas bouge depuis. */
+  coursePreviewRead: 'course:preview-read',
+  coursePreviewCache: 'course:preview-cache',
 
   notesRead: 'notes:read',
   notesWrite: 'notes:write',

@@ -386,10 +386,16 @@ export function htmlToMarkdown(html: string): string {
  * Marked laisse passer un commentaire HTML tel quel : il suffit de le recoller
  * a l'ouverture du bloc suivant. On ne compte pas les blocs — on lit ce qui est
  * ecrit, ce qui reste juste meme si un paragraphe a ete supprime a la main.
+ *
+ * Un tableau, un encadre et un schema en font partie depuis qu'ils portent une
+ * ancre. Le `div` n'est admis que muni de l'un des deux attributs qui font
+ * d'un `div` un bloc de l'editeur : sans cette condition, le `<div align>` qui
+ * porte un centrage recevrait l'ancre, et la perdrait aussitot — la traduction
+ * de l'alignement, quelques lignes plus bas, le refait en `<p style>`.
  */
 function applyAnchors(html: string): string {
   return html.replace(
-    /<!--\s*ancre\s+(\{[\s\S]*?\})\s*-->\s*(<(?:p|h[1-6]|ul|ol|blockquote|pre)\b)/g,
+    /<!--\s*ancre\s+(\{[\s\S]*?\})\s*-->\s*(<(?:p|h[1-6]|ul|ol|blockquote|pre|table|div(?=[^>]*\bdata-(?:callout|type)=))\b)/g,
     (match, body: string, open: string) => {
       const anchor = parseAnchorMarker(body)
       if (!anchor) return match
@@ -628,12 +634,59 @@ export function withoutFrontMatter(markdown: string): string {
   )
 }
 
+/**
+ * Le plus profond des titres que l'editeur sait tenir.
+ *
+ * L'editeur declare `heading: { levels: [1, 2, 3] }`, et ProseMirror ne garde
+ * que ce que son schema connait. Un `<h4>` n'y entre pas : il est defait, son
+ * texte retombe dans un paragraphe — et l'attribut porte par la balise s'en va
+ * avec elle.
+ */
+const MAX_HEADING = 3
+
+/**
+ * Rabat les titres trop profonds au dernier niveau que l'editeur accepte.
+ *
+ * Sans cela, un « #### » perd deux choses d'un coup a la relecture : son rang
+ * de titre, ce qui se voit, et **son ancre**, ce qui ne se voit pas. La
+ * seconde perte est la vraie : le marqueur avait ete correctement calcule,
+ * ecrit devant le bon bloc, et il disparaissait entre le fichier et l'ecran,
+ * si bien que le bloc se remettait a relever de l'ancre du dessus. C'etait,
+ * dans le vault reel, l'un des visages de l'heritage silencieux.
+ *
+ * Ici plutot que chez l'assistant : le rabattage doit valoir pour tout ce qui
+ * entre dans l'editeur — une note ecrite dans Obsidian, un collage, un import
+ * — et non pour la seule main qu'on peut sermonner dans un prompt. La regle
+ * appartient a la frontiere, pas a l'un de ceux qui la traversent.
+ *
+ * Les lignes d'un bloc de code sont laissees tranquilles : « #### » y est du
+ * texte, souvent un commentaire, jamais un titre.
+ */
+function demoteHeadings(markdown: string): string {
+  if (!/^ {0,3}#{4,}\s/m.test(markdown)) return markdown
+
+  let fenced = false
+  return markdown
+    .split('\n')
+    .map((line) => {
+      if (/^ {0,3}(?:`{3,}|~{3,})/.test(line)) {
+        fenced = !fenced
+        return line
+      }
+      if (fenced) return line
+      return line.replace(/^( {0,3})(#{4,})(\s)/, (_m, indent: string, _hashes, space: string) =>
+        `${indent}${'#'.repeat(MAX_HEADING)}${space}`
+      )
+    })
+    .join('\n')
+}
+
 export function markdownToHtml(markdown: string): string {
   if (!markdown.trim()) return ''
 
   // Les marqueurs d'ancre avant tout : ils portent du texte de cours recopie
   // tel quel, que rien de ce qui suit ne doit avoir l'occasion de relire.
-  const { text: withoutAnchors, markers } = extractAnchorMarkers(markdown)
+  const { text: withoutAnchors, markers } = extractAnchorMarkers(demoteHeadings(markdown))
 
   // Les schemas ensuite : leur syntaxe est un bloc de code aux yeux de marked,
   // et son contenu n'a pas a etre analyse.
@@ -661,7 +714,13 @@ export function markdownToHtml(markdown: string): string {
     breaks: false
   })
   if (typeof parsed !== 'string') return ''
-  const rendered = applyAnchors(restoreAnchorMarkers(applyTableStyles(parsed, styles), markers))
+  // Les schemas redeviennent des `div` avant l'ancrage, et non apres : tant
+  // qu'un schema est un jeton, marked l'a enveloppe dans un `<p>`, et le
+  // marqueur qui le precede s'accrocherait a ce paragraphe-la — que le retour
+  // du schema remplace, ancre comprise.
+  const rendered = applyAnchors(
+    restoreAnchorMarkers(restoreDiagrams(applyTableStyles(parsed, styles), sources), markers)
+  )
 
   // L'alignement est stocke en <div align>, la forme qu'Obsidian affiche ;
   // l'editeur, lui, ne sait aligner qu'un paragraphe. Sans cette traduction,
@@ -680,9 +739,9 @@ export function markdownToHtml(markdown: string): string {
     (_match, head: string, alignment: string) => `<li style="text-align: ${alignment}">${head}`
   )
 
-  // Les formules et les schemas reviennent en noeuds d'editeur, pas en HTML
-  // fige : ils doivent rester modifiables.
-  return restoreMathNodes(restoreDiagrams(alignedItems, sources), formulas)
+  // Les formules reviennent en noeuds d'editeur, pas en HTML fige : elles
+  // doivent rester modifiables. Les schemas sont deja revenus, plus haut.
+  return restoreMathNodes(alignedItems, formulas)
 }
 
 // ---------------------------------------------------------------------------

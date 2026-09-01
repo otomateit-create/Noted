@@ -337,11 +337,22 @@ export interface Course {
   title: string
   /** Matiere = nom du dossier sous Cours/. */
   subject: string
+  /**
+   * Le dossier de classement dans la matiere — « HEC » pour
+   * `Private Equity/HEC/lbo.pdf` — ou null quand le cours est pose a la racine.
+   *
+   * Derive de l'identifiant, jamais l'inverse : c'est le chemin qui fait foi,
+   * ici comme partout ailleurs. Le champ n'existe que pour epargner a l'ecran
+   * de redecouper l'identifiant a chaque rendu.
+   */
+  folder: string | null
   format: CourseFormat
   /** Chemin absolu du document source. */
   path: string
   /** Chemin absolu de la note associee (peut ne pas exister encore). */
   notePath: string
+  /** La note existe deja sur le disque : le cours a ete travaille. */
+  hasNote?: boolean
   /** Taille en octets, pour affichage. */
   sizeBytes: number
   /** Date de derniere modification du document source (ms epoch). */
@@ -465,6 +476,18 @@ export interface FigureReading {
   text: string
 }
 
+/**
+ * L'apercu d'un cours : sa premiere page en image, et ce que le rendu a appris
+ * en passant — le nombre de pages d'un PDF, le nombre de mots d'un texte —
+ * pour que la carte dise la taille du cours sans le rouvrir.
+ */
+export interface CoursePreview {
+  /** Image PNG de la premiere page. */
+  png: Uint8Array
+  pages?: number
+  words?: number
+}
+
 export interface ExtractedPage {
   /** 1-indexe, comme l'affichage. */
   page: number
@@ -580,21 +603,44 @@ export const OCR_MAX_IMAGE_PIXELS = 1_100_000
 /**
  * Surface totale accordee a une page une fois decoupee en regions.
  *
- * Deux fois le plafond d'une image seule, et ce choix a ete arrete avec
- * l'utilisateur. Il repond a un defaut precis du regime precedent : une capture
- * d'ecran Retina plein cadre etait ramenee a 38 % de sa taille pour tenir dans
- * `OCR_MAX_IMAGE_PIXELS`, et un tableau dense y devenait illisible bien avant
- * que le modele n'ait son mot a dire.
+ * **C'est un budget de temps, et non de memoire** — la distinction a longtemps
+ * manque ici, et elle est ce qui autorise le chiffre ci-dessous. Les regions
+ * partent au moteur une par une, dans une file strictement serialisee
+ * (`ocr/engine.ts`) : le pic de memoire graphique est donc fixe par la plus
+ * grande image seule, jamais par leur somme. Ce que borne ce budget, c'est le
+ * travail total demande pour une page — donc la chauffe et la duree. La
+ * contrainte de memoire, elle, est ailleurs et ne bouge pas :
+ * `OCR_MAX_IMAGE_PIXELS`, qu'aucune region ne depasse jamais.
  *
- * Decoupee, la meme page n'a plus a tout faire tenir dans une seule image : les
- * regions utiles gardent leur resolution d'origine, les blancs et les pieds de
- * page ne coutent plus rien. Ce budget dit jusqu'ou l'on va — au-dela, tout est
- * reduit d'un meme facteur, pour que la chauffe reste bornee quelle que soit la
- * page. Aucune region ne depasse jamais `OCR_MAX_IMAGE_PIXELS` a elle seule :
- * c'est le plafond mesure au-dela duquel l'encodeur visuel epuise la memoire
- * graphique.
+ * Quatre millions, et non deux : c'est la surface d'une A4 rendue a 200 points
+ * par pouce, la resolution pour laquelle GLM-OCR est calibre (`pdf_dpi: 200`
+ * dans la configuration de reference). Au budget precedent, la meme page etait
+ * ramenee a 151 points par pouce juste apres avoir ete dessinee — le gain de
+ * resolution etait repris d'une main a la page ce qu'on venait de donner de
+ * l'autre au rendu.
  */
-export const OCR_PAGE_PIXEL_BUDGET = 2_200_000
+export const OCR_PAGE_PIXEL_BUDGET = 4_000_000
+
+/**
+ * Resolution a laquelle une page de document est dessinee avant d'etre lue.
+ *
+ * Deux cents points par pouce : c'est la valeur de la chaine officielle
+ * (`glmocr/config.yaml`, `pdf_dpi: 200`), et le modele est entraine sur des
+ * pages a cette echelle. Le rendu partait auparavant a soixante-douze — la
+ * taille en points du PDF, prise telle quelle faute d'agrandissement — ou un
+ * caractere de corps ne fait qu'une dizaine de pixels de haut et ou les traits
+ * fins passent sous le pixel. C'etait la premiere cause de texte manquant.
+ */
+export const OCR_PAGE_DPI = 200
+
+/**
+ * Cote le plus long d'une page dessinee, en pixels.
+ *
+ * Meme plafond que la chaine de reference (`max_width_or_height=3500`). Il ne
+ * sert que pour les formats extremes — une page panoramique, un plan — ou la
+ * seule surface laisserait passer une image demesuree dans un sens.
+ */
+export const OCR_PAGE_MAX_SIDE = 3500
 
 /**
  * Les dimensions a donner a une **page** avant de la decouper en regions.
@@ -610,9 +656,18 @@ export function fitToPageBudget(
   height: number
 ): { width: number; height: number } {
   const pixels = width * height
-  if (pixels <= 0 || pixels <= OCR_PAGE_PIXEL_BUDGET) return { width, height }
+  if (pixels <= 0) return { width, height }
 
-  const scale = Math.sqrt(OCR_PAGE_PIXEL_BUDGET / pixels)
+  // Deux plafonds, et le plus contraignant l'emporte : la surface, qui borne le
+  // travail demande, et le cote le plus long, qui rattrape les formats extremes
+  // qu'une surface seule laisserait passer.
+  const byArea = pixels > OCR_PAGE_PIXEL_BUDGET ? Math.sqrt(OCR_PAGE_PIXEL_BUDGET / pixels) : 1
+  const longest = Math.max(width, height)
+  const bySide = longest > OCR_PAGE_MAX_SIDE ? OCR_PAGE_MAX_SIDE / longest : 1
+
+  const scale = Math.min(byArea, bySide)
+  if (scale >= 1) return { width, height }
+
   return {
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale))
@@ -630,10 +685,16 @@ export function fitToOcrBudget(
   const pixels = width * height
   if (pixels <= 0 || pixels <= OCR_MAX_IMAGE_PIXELS) return { width, height }
 
+  // On tronque, on n'arrondit pas. La nuance vaut ici ce qu'elle ne vaut nulle
+  // part ailleurs : ce plafond est une contrainte de memoire graphique, et deux
+  // arrondis vers le haut suffisent a le franchir. Une A4 ramenee au budget
+  // sortait en 882 × 1248, soit 1 100 736 pixels pour un plafond de 1 100 000 —
+  // sans consequence a ce niveau, mais un plafond qu'on depasse n'en est plus
+  // un, et rien n'avertit quand celui-la cede.
   const scale = Math.sqrt(OCR_MAX_IMAGE_PIXELS / pixels)
   return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale))
+    width: Math.max(1, Math.floor(width * scale)),
+    height: Math.max(1, Math.floor(height * scale))
   }
 }
 
@@ -847,6 +908,23 @@ export interface NoteProposal {
    * reecriture calculee sur un texte perime ecraserait ce qu'il vient de taper.
    */
   base?: string
+  /**
+   * S'applique sans apercu ni decision, comme si l'ecriture directe etait
+   * active.
+   *
+   * Reserve a la pose d'un brouillon. L'assistant y compose ses passages en
+   * plusieurs fois, chacun visible dans le fil du chat au moment ou il
+   * s'ecrit ; une carte de confirmation a la fin n'apprendrait plus rien a
+   * l'utilisateur, et lui redemanderait une decision sur un texte qu'il a deja
+   * lu. Les autres ecritures — retouche d'un passage, reecriture d'ensemble,
+   * modification d'un objet — gardent leur apercu : elles touchent a ce qui est
+   * deja dans la note, et il ne l'a pas relu.
+   *
+   * Ce qui reste vrai malgre tout : les verifications de peremption et de
+   * panneau ouvert, qui n'ont rien a voir avec l'accord de l'utilisateur, et la
+   * copie de la version d'avant, qui rend le retour en arriere possible.
+   */
+  direct?: boolean
 }
 
 /**
@@ -1158,6 +1236,18 @@ export interface VaultPaths {
    * de la recalculer.
    */
   originals: string
+  /**
+   * Les brouillons de l'assistant : ce qu'il ecrit avant que cela n'entre
+   * dans la note, un fichier par cours, meme arborescence que Notes/.
+   *
+   * Visible et non dans `.noted/` parce que ce n'est pas du cache : c'est du
+   * texte ecrit, qui survit a un refus, a une interruption ou a un plantage,
+   * et qui garde a cote de chaque passage la source que l'assistant a
+   * declaree. C'est la seule trace qui permette, apres coup, de dire d'une
+   * mauvaise ancre si elle vient d'une source mal declaree ou d'un passage
+   * mal choisi dans la bonne portee.
+   */
+  drafts: string
   internal: string
 }
 
@@ -1241,14 +1331,17 @@ export interface NotedApi {
     /**
      * Ouvre le selecteur de fichiers et recoit ce qui a ete choisi. Documents
      * et images passent par la meme porte : voir `ImportResult`.
+     *
+     * `folder` range les documents dans un dossier de classement de la matiere,
+     * cree au besoin. Les images, elles, arrivent toujours a la racine.
      */
-    importCourses(subject: string): Promise<ImportResult>
+    importCourses(subject: string, folder?: string | null): Promise<ImportResult>
     /**
      * Importe des fichiers deja designes — ceux d'un glisser-deposer. Meme
      * partage que pour le selecteur ; les formats inconnus sont ignores en
      * silence.
      */
-    importPaths(paths: string[], subject: string): Promise<ImportResult>
+    importPaths(paths: string[], subject: string, folder?: string | null): Promise<ImportResult>
     /** Cree un dossier de matiere. Renvoie le nom retenu, une fois normalise. */
     createSubject(name: string): Promise<string>
     /**
@@ -1268,8 +1361,13 @@ export interface NotedApi {
   course: {
     /** Renomme le document. Renvoie son nouvel identifiant. */
     rename(courseId: string, title: string): Promise<string>
-    /** Deplace le document dans une autre matiere. Renvoie son nouvel identifiant. */
-    move(courseId: string, subject: string): Promise<string>
+    /**
+     * Range le document dans une matiere et, si `folder` est donne, dans un de
+     * ses dossiers de classement — cree au besoin. Sans dossier, le cours
+     * atterrit a la racine de la matiere. Note, surlignages, cartes et memoire
+     * suivent. Renvoie son nouvel identifiant.
+     */
+    move(courseId: string, subject: string, folder?: string | null): Promise<string>
     /** Envoie a la corbeille le document et sa note, et efface ses vecteurs. */
     remove(courseId: string): Promise<void>
     /** Octets bruts du document, pour le rendu pdf.js cote renderer. */
@@ -1289,6 +1387,10 @@ export interface NotedApi {
      * depose ici. Le main le conserve pour alimenter le contexte de Claude.
      */
     cacheExtraction(extracted: ExtractedCourse): Promise<void>
+    /** L'apercu deja dessine de ce cours, ou null s'il faut le refaire. */
+    readPreview(courseId: string): Promise<CoursePreview | null>
+    /** Le renderer a dessine l'apercu ; le main le garde pour la prochaine fois. */
+    cachePreview(courseId: string, preview: CoursePreview): Promise<void>
   }
   /**
    * Chemin d'un fichier depose sur la fenetre. Le renderer n'a pas acces au

@@ -6,7 +6,7 @@
  * decoupe la page en regions, chaque region part ensuite avec la tache qui lui
  * convient — et donne la raison : un modele de cette taille « est tres sujet
  * aux hallucinations et a la generation repetitive sur les mises en page
- * complexes ». C'est mot pour mot la panne que `degenerate()` rattrapait apres
+ * complexes ». C'est mot pour mot la panne que `untangle()` rattrape apres
  * coup dans `engine.ts`. Ce fichier la fait disparaitre avant qu'elle arrive.
  *
  * **Un processus Node separe**, pour la meme raison que le calcul des vecteurs,

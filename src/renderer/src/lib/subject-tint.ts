@@ -23,7 +23,7 @@ export interface SubjectTint {
  * Huit teintes, chacune un degrade de deux tons de la meme famille. Elles
  * couvrent le cercle chromatique pour que deux matieres voisines dans la
  * grille ne se ressemblent pas, et restent assez sourdes pour qu'un ecran
- * de quatre cartes ne vire pas au bariolage.
+ * de quatre cartes ne vire pas au bariolage. Les flashcards s'en servent.
  */
 const TINTS: readonly SubjectTint[] = [
   { from: '#ffb27a', to: '#e05f4e' }, // ambre → corail
@@ -36,14 +36,78 @@ const TINTS: readonly SubjectTint[] = [
   { from: '#b3a6dd', to: '#6e619f' } // lavande → violet
 ] as const
 
-export function subjectTint(name: string): SubjectTint {
-  // Un melange positionnel plutot qu'une somme de caracteres : « IA » et « AI »
-  // doivent tomber sur deux teintes differentes. Le modulo tient le nombre
-  // sous la limite des entiers exacts, quelle que soit la longueur du nom.
-  let hash = 0
+/**
+ * Un melange positionnel plutot qu'une somme de caracteres : « IA » et « AI »
+ * doivent tomber sur deux teintes differentes. Le modulo tient le nombre
+ * sous la limite des entiers exacts, quelle que soit la longueur du nom.
+ */
+function hash(name: string): number {
+  let value = 0
   for (let index = 0; index < name.length; index += 1) {
-    hash = (hash * 31 + name.charCodeAt(index)) % 1000003
+    value = (value * 31 + name.charCodeAt(index)) % 1000003
+  }
+  return value
+}
+
+export function subjectTint(name: string): SubjectTint {
+  return TINTS[hash(name) % TINTS.length]
+}
+
+// ---------------------------------------------------------------------------
+// La teinte sourde des cartes de matiere et de la page de matiere.
+//
+// Pas un degrade mais un seul angle de teinte, en oklch : le papier de la
+// carte, son filet, son symbole et l'encre de son titre en sont tous derives
+// en ne faisant varier que la luminosite et la chroma — c'est ce qui fait le
+// ton sur ton. Huit tons, tous sourds, qui font le tour du cercle.
+// ---------------------------------------------------------------------------
+
+export interface SubjectHue {
+  /** Angle de teinte oklch, en degres. */
+  hue: number
+  /** Le nom du ton, pour en parler. */
+  name: string
+}
+
+const HUES: readonly SubjectHue[] = [
+  { hue: 150, name: 'sauge' },
+  { hue: 195, name: 'céladon' },
+  { hue: 80, name: 'ocre' },
+  { hue: 250, name: 'ardoise' },
+  { hue: 115, name: 'olive' },
+  { hue: 295, name: 'lavande' },
+  { hue: 40, name: 'terre' },
+  { hue: 350, name: 'bruyère' }
+] as const
+
+/** La teinte d'un nom pris seul — pour une matiere qu'on est en train de nommer. */
+export function subjectHue(name: string): SubjectHue {
+  return HUES[hash(name) % HUES.length]
+}
+
+/**
+ * Les teintes de toutes les matieres presentes, sans doublon tant qu'elles
+ * sont huit ou moins.
+ *
+ * Tirer chaque teinte du seul nom donnerait presque surement deux matieres de
+ * la meme couleur sur huit — et la couleur ne differencierait plus rien. Les
+ * matieres sont donc prises dans l'ordre alphabetique, chacune sur la teinte
+ * que son nom designe, ou sur la suivante encore libre. Ajouter une matiere
+ * peut, rarement, en decaler une autre d'un ton : c'est le prix de huit
+ * couleurs distinctes sans rien ecrire sur le disque.
+ */
+export function assignSubjectHues(names: readonly string[]): Map<string, SubjectHue> {
+  const taken = new Set<number>()
+  const hues = new Map<string, SubjectHue>()
+
+  for (const name of [...names].sort((a, b) => a.localeCompare(b, 'fr'))) {
+    let index = hash(name) % HUES.length
+    if (taken.size < HUES.length) {
+      while (taken.has(index)) index = (index + 1) % HUES.length
+    }
+    taken.add(index)
+    hues.set(name, HUES[index])
   }
 
-  return TINTS[hash % TINTS.length]
+  return hues
 }

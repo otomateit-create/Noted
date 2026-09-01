@@ -75,12 +75,22 @@ export type Task = keyof typeof TASKS
 const CONTEXT = 12_000
 
 /**
- * Plafond de sortie pour une page.
+ * Plafond de sortie pour une region.
  *
- * Il ne sert pas a economiser : il sert a couper une boucle. Un modele qui perd
- * pied sur une image illisible repete la meme ligne indefiniment.
+ * Huit mille cent quatre-vingt-douze, la valeur de la chaine officielle
+ * (`glmocr/config.yaml`, `page_loader.max_tokens`). Il en valait deux mille, et
+ * c'etait une cause directe de texte manquant : un gros tableau rendu en HTML
+ * ou une page entiere lue d'un bloc les depasse, la reponse etait coupee en
+ * plein milieu, et rien ne le disait — `finish_reason` n'est pas regarde, et le
+ * texte tronque partait au cache comme s'il etait complet.
+ *
+ * Ce plafond n'est plus le garde-fou contre les boucles : c'est `repeat_penalty`
+ * qui l'est desormais, la ou la reference le met, et `untangle` qui ramasse ce
+ * qui passe malgre tout. Le contexte suit : au plus 1 403 jetons d'image — le
+ * plafond d'une image seule vaut 1,1 Mpx, soit 784 pixels par jeton — plus ces
+ * 8 192, tient sous les 12 000 ci-dessus.
  */
-const MAX_TOKENS = 2_000
+const MAX_TOKENS = 8_192
 
 /**
  * Coeurs laisses au calcul.
@@ -305,7 +315,19 @@ async function start(): Promise<boolean> {
   // abondamment. Sans cette purge, il se bloquerait en ecriture une fois pleins,
   // et la lecture s'arreterait sans un mot.
   spawned.stdout?.resume()
-  spawned.stderr?.resume()
+
+  // Le tube d'erreur se vide aussi, mais on en retient ce qui compte. Tout jeter
+  // avait un cout cache : l'echec le plus redoutable de ce moteur —
+  // `kIOGPUCommandBufferCallbackErrorOutOfMemory`, quand l'encodeur visuel
+  // reclame plus que la machine n'a — ne remonte pas par la reponse HTTP, qui
+  // arrive vide et bien formee. Sans cette ligne, une page muette et une page
+  // sans texte se ressemblent parfaitement.
+  spawned.stderr?.setEncoding('utf8')
+  spawned.stderr?.on('data', (chunk: string) => {
+    for (const line of chunk.split('\n')) {
+      if (/error|out of memory|failed/i.test(line)) console.warn('[ocr]', line.trim())
+    }
+  })
 
   const forget = (): void => {
     if (child === spawned) {
@@ -385,10 +407,10 @@ async function run(png: Buffer, task: Task): Promise<OcrRead | null> {
 
     if (markdown === null) return null
 
-    // Une lecture qui s'effondre en boucle vaut une lecture vide, et non un
-    // echec : le moteur a bien tourne, c'est l'image qui ne se laisse pas lire.
-    const text = unfence(markdown)
-    return { markdown: degenerate(text) ? '' : text }
+    // Une lecture qui s'effondre en boucle est coupee a l'endroit ou elle
+    // s'effondre, et ce qui precede est garde : le moteur a bien tourne, et le
+    // texte lu avant la boucle est du vrai texte.
+    return { markdown: untangle(unfence(markdown)) }
   } catch {
     return null
   } finally {
@@ -423,11 +445,25 @@ async function ask(png: Buffer, prompt: string): Promise<string | null> {
             ]
           }
         ],
-        // Une lecture n'est pas une redaction. On veut le mot le plus probable,
-        // pas une variation : la meme page doit ressortir deux fois de suite,
-        // et le cache sur disque suppose ce determinisme.
-        temperature: 0.1,
+        // Les valeurs de la chaine officielle, a l'identique
+        // (`glmocr/config.yaml`, section `page_loader`). Une lecture n'est pas
+        // une redaction : on veut le mot le plus probable, pas une variation —
+        // la meme page doit ressortir deux fois de suite, et le cache sur
+        // disque suppose ce determinisme.
+        temperature: 0,
+        top_p: 0.00001,
         top_k: 1,
+        // **La piece qui manquait.** Sans elle, llama.cpp laisse la penalite a
+        // 1,0, c'est-a-dire desactivee, et rien n'empeche le modele de recopier
+        // la meme ligne jusqu'au plafond de jetons. La reference met 1,1, et
+        // c'est son seul garde-fou contre l'effondrement.
+        repeat_penalty: 1.1,
+        // La penalite de llama.cpp ne regarde par defaut que les soixante-quatre
+        // derniers jetons, la ou celle de la reference porte sur toute la
+        // sortie. Deux cent cinquante-six couvre une boucle de plusieurs lignes
+        // sans penaliser un tableau, dont les cellules se repetent legitimement
+        // bien au-dela.
+        repeat_last_n: 256,
         max_tokens: MAX_TOKENS
       })
     })
@@ -478,26 +514,66 @@ function unfence(text: string): string {
 }
 
 /**
- * La lecture s'est-elle visiblement effondree ?
+ * Longueur minimale d'une queue de repetition pour qu'on la tienne pour une
+ * boucle. Six lignes : en deca, c'est un document qui se repete, ce qui arrive.
+ */
+const LOOP = 6
+
+/**
+ * Coupe une lecture a l'endroit ou le modele a cesse de dire du neuf.
  *
  * Un modele qui perd pied sur une image illisible ne rend pas un texte
- * mediocre : il boucle, et recopie la meme ligne jusqu'au plafond de jetons.
+ * mediocre : il boucle, et recopie les memes lignes jusqu'au plafond de jetons.
  * Ecrire cela dans le cours serait pire que de ne rien ecrire — la boucle
  * partirait dans l'index, l'IA la citerait, et elle occuperait la page a la
  * place du texte manquant.
  *
- * On ne detecte ici que l'effondrement visible. Une page lue avec assurance et
- * fausse — « achete » rendu « achété » — passe et doit passer : la corriger
+ * **Ce qui change, c'est ce qu'on en fait.** La version precedente declarait la
+ * lecture perdue et rendait la chaine vide : tout le texte lu avant la boucle
+ * partait avec elle, et ce vide etait ensuite mis en cache comme un resultat
+ * legitime — donc resservi pour toujours. La chaine officielle ne fait rien de
+ * tel : `clean_repeated_content` coupe a la repetition et **garde ce qui
+ * precede** (`glmocr/utils/result_postprocess_utils.py`). C'est ce qu'on fait
+ * ici.
+ *
+ * La regle est plus simple que la sienne, et elle la contient : on coupe a la
+ * derniere ligne apres laquelle plus rien de neuf n'est dit. Une boucle sur une
+ * seule ligne y tombe, une boucle qui alterne trois lignes aussi — ce que le
+ * comptage de la ligne la plus frequente, chez la reference, laisse passer.
+ *
+ * On ne detecte toujours que l'effondrement visible. Une page lue avec assurance
+ * et fausse — « achete » rendu « achété » — passe et doit passer : la corriger
  * demanderait de savoir ce qui etait ecrit, et c'est precisement la question
  * qu'on posait au modele.
  */
-function degenerate(text: string): boolean {
-  const lines = text.split('\n').map((line) => line.trim()).filter(Boolean)
-  if (lines.length < 6) return false
+function untangle(text: string): string {
+  const lines = text.split('\n')
+  const seen = new Set<string>()
 
-  // Deux tiers de lignes repetees : aucun cours ne ressemble a cela, et une
-  // boucle y arrive toujours.
-  return new Set(lines).size / lines.length < 0.34
+  // Debut de la derniere suite de lignes deja vues. Remis a neant des qu'une
+  // ligne inedite parait : ce qui compte est la queue, pas les repetitions du
+  // milieu, qu'un document peut tres bien porter.
+  let loopsFrom = -1
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim()
+    if (!line) continue
+
+    if (seen.has(line)) {
+      if (loopsFrom === -1) loopsFrom = index
+      continue
+    }
+
+    seen.add(line)
+    loopsFrom = -1
+  }
+
+  if (loopsFrom === -1) return text
+
+  const repeated = lines.slice(loopsFrom).filter((line) => line.trim()).length
+  if (repeated < LOOP) return text
+
+  return lines.slice(0, loopsFrom).join('\n').trim()
 }
 
 /**
