@@ -17,6 +17,7 @@ import { useAnnotations } from '../hooks/useAnnotations'
 import { useOcrConversion, type ConversionSource } from '../hooks/useOcrConversion'
 import { useOcrResume } from '../hooks/useOcrResume'
 import { describeSelection, locateAnnotation, type Passage } from '../lib/annotate'
+import type { ChatMention } from './ChatPanel'
 import {
   annotationAt,
   contribute,
@@ -127,6 +128,34 @@ function sameUnits(a: string[], b: string[]): boolean {
   return a.join() === b.join()
 }
 
+/** Longueur au-dela de laquelle un titre de section est raccourci. */
+const HEADING_MAX = 34
+
+/**
+ * La provenance qu'un passage cite annonce a l'assistant.
+ *
+ * Meme forme que celle des notes — « mes notes, p. 12 » — parce que les deux se
+ * lisent cote a cote dans le meme crochet, et qu'un numero de page ne dit pas
+ * de lui-meme s'il vient du cours ou de ce qu'on a ecrit dessus. Un document
+ * sans pages donne son titre courant ; celui qui n'a ni l'un ni l'autre dit
+ * seulement d'ou il vient, ce qui est deja l'essentiel.
+ */
+function quoteSource(page: number | null, heading: string | null): string {
+  if (page !== null) return `mon cours, p. ${page}`
+  if (!heading) return 'mon cours'
+
+  // Un titre de cours HTML tient parfois la ligne entiere — « Le levier fiscal
+  // francais et ses verrous, dont l'amendement Charasse ». Passe cette
+  // longueur, ce n'est plus un repere mais une phrase : elle chasserait le
+  // passage hors de sa puce dans la barre de saisie, et n'apprendrait rien de
+  // plus au modele. On coupe au dernier mot entier.
+  if (heading.length <= HEADING_MAX) return `mon cours, ${heading}`
+  const cut = heading.slice(0, HEADING_MAX)
+  const space = cut.lastIndexOf(' ')
+  return `mon cours, ${(space > HEADING_MAX / 2 ? cut.slice(0, space) : cut).trimEnd()}…`
+}
+
+
 /** Un passage vise : soit une selection pas encore posee, soit un surlignage. */
 interface Target {
   /** Ou pointer la palette, en coordonnees de fenetre. */
@@ -157,8 +186,19 @@ interface CoursePanelProps {
   onCloseFind: () => void
   /** Bascule le mode concentration sur ce panneau. */
   onToggleExpand: () => void
-  /** Envoie un passage a l'assistant. */
-  onExplain: (text: string, reference: string) => void
+  /**
+   * Accroche un passage du cours a la question posee a l'assistant — « Citer »
+   * sur une selection. Rien ne part : le passage rejoint la barre de saisie et
+   * attend la question qu'on veut poser dessus, exactement comme un passage des
+   * notes ou une phrase d'une reponse.
+   */
+  onQuote: (quote: ChatMention) => void
+  /**
+   * Le cadre du document, remonte pour que l'assistant y pose les pastilles des
+   * passages cites. Un rappel plutot qu'un ref : celui qui les rend doit etre
+   * averti quand le cadre apparait ou disparait.
+   */
+  stageRef: (element: HTMLElement | null) => void
   /** Ou l'on en est de la lecture, pour ancrer ce qui s'ecrit maintenant. */
   onReading: (reading: NoteAnchor | null, fromUser: boolean) => void
   /**
@@ -244,7 +284,8 @@ export default function CoursePanel({
   findOpen,
   onCloseFind,
   onToggleExpand,
-  onExplain,
+  onQuote,
+  stageRef,
   onReading,
   onVisibleUnits,
   onSections,
@@ -808,6 +849,20 @@ export default function CoursePanel({
     jumpToPage(pageTarget.page)
   }, [pageTarget, state, jumpToPage])
 
+  /**
+   * Vrai le temps d'un defilement que nous avons provoque. C'est le garde-fou
+   * anti-boucle : un defilement venu de la synchronisation ne doit pas en
+   * declencher un autre en retour, sinon les deux panneaux se poursuivent.
+   */
+  const driven = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const markDriven = useCallback(() => {
+    if (driven.current) clearTimeout(driven.current)
+    driven.current = setTimeout(() => {
+      driven.current = null
+    }, 400)
+  }, [])
+
   // --- Reprise de la lecture ---------------------------------------------
   //
   // Le retour a la position precedente doit precede toute memorisation :
@@ -826,61 +881,73 @@ export default function CoursePanel({
     // pendant lesquelles l'ancien reste a l'ecran.
     if (loadedId !== course.id) return
 
-    restored.current = course.id
     const spot = readingSpot(course.id)
+    const blocks = readingBlocks()
+    // Un PDF pose ses emplacements de page des le premier rendu, mais le corps
+    // d'un Word ou d'un Markdown n'est connu qu'au suivant — le cadre du
+    // document se signale par un rappel de ref. On repasse : marquer le cours
+    // comme repris maintenant le laisserait ouvert a sa premiere ligne.
+    if (spot?.block && blocks.length === 0) return
+
+    restored.current = course.id
     setZoom(spot?.zoom ?? 1)
-    if (!spot) return
 
-    if (state && spot.page && spot.page > 1 && spot.page <= state.pageCount) {
-      // Pas de halo : il signale une arrivee demandee, pas une reprise.
-      goToPage(spot.page)
-      setCurrentPage(spot.page)
-      // Le grossissement retenu, pose juste au-dessus, va changer la hauteur de
-      // toutes les pages a la trame suivante. Sans ancre posee ici, la reprise
-      // partirait a la derive avant meme le premier coup de molette.
-      anchor.current = anchorAtLine(body, readingBlocks())
-    } else if (documentHtml && spot.scroll) {
-      // Une trame laisse le temps a la mise en page de se poser : les images
-      // d'un Word arrivent en base64 et changent la hauteur du document.
-      requestAnimationFrame(() => {
-        body.scrollTop = spot.scroll ?? 0
-        // Le grossissement retenu recompose le texte, et rien ne dit qu'il
-        // soit deja pose : l'ancre tient l'endroit quoi qu'il arrive ensuite.
-        anchor.current = anchorAtLine(body, readingBlocks())
-      })
-    }
-  }, [course, loadedId, state, documentHtml, goToPage, readingBlocks])
+    const element = spot?.block ? blocks[spot.block.index] : null
+    // Le document a change de forme depuis la derniere fois — des pages en
+    // moins, un Word reconverti : le rang ne designe plus rien, et l'on ouvre
+    // au debut plutot qu'au hasard.
+    if (!spot?.block || !element) return
 
-  useEffect(() => {
-    if (!course || loadedId !== course.id || restored.current !== course.id) return
-    if (state) rememberSpot(course.id, { page: currentPage })
-  }, [course, loadedId, state, currentPage])
+    markDriven()
+    scrollToAnchor(body, { element, offset: spot.block.offset })
+    // Le grossissement retenu, pose juste au-dessus, va recomposer tout le
+    // document a la trame suivante. C'est cette ancre-la que l'effet de mise en
+    // page ira relire pour ramener la meme ligne — sans elle, la reprise
+    // partirait a la derive avant meme le premier coup de molette.
+    anchor.current = { element, offset: spot.block.offset }
+  }, [course, loadedId, state, documentHtml, htmlRoot, readingBlocks, markDriven])
 
-  // Un document sans pagination n'a pas de page a retenir : c'est son
-  // defilement qui tient lieu de signet.
+  /*
+   * Ou l'on en est, note pendant qu'on lit.
+   *
+   * Le meme releve que la ligne de lecture, et pour tous les formats : le bloc
+   * qu'elle traverse et la fraction parcourue de ce bloc. Une ecriture par
+   * demi-seconde de defilement suffit largement, la ou un defilement en
+   * produirait des centaines — et ce qui attendait encore est ecrit au depart
+   * du cours, pour qu'un cours quitte aussitot apres l'avoir fait defiler ne
+   * revienne pas la ou il etait il y a une demi-seconde.
+   */
   useEffect(() => {
     const body = bodyRef.current
-    if (!course || !body || !documentHtml || loadedId !== course.id) return
+    if (!course || !body || loadedId !== course.id) return
 
     let timer: ReturnType<typeof setTimeout> | null = null
+
+    const remember = (): void => {
+      if (restored.current !== course.id) return
+      const blocks = readingBlocks()
+      const point = anchorAtLine(body, blocks)
+      if (!point) return
+      const index = blocks.indexOf(point.element)
+      if (index >= 0) rememberSpot(course.id, { block: { index, offset: point.offset } })
+    }
+
     const onScroll = (): void => {
       if (timer) return
-      // Une ecriture par demi-seconde suffit largement, la ou un defilement en
-      // produirait des centaines.
       timer = setTimeout(() => {
         timer = null
-        if (restored.current === course.id) {
-          rememberSpot(course.id, { scroll: body.scrollTop })
-        }
+        remember()
       }, 500)
     }
 
     body.addEventListener('scroll', onScroll, { passive: true })
     return () => {
-      if (timer) clearTimeout(timer)
       body.removeEventListener('scroll', onScroll)
+      if (!timer) return
+      clearTimeout(timer)
+      remember()
     }
-  }, [course, loadedId, documentHtml])
+  }, [course, loadedId, readingBlocks])
 
   // --- Ou l'on en est de la lecture ----------------------------------------
   //
@@ -896,20 +963,6 @@ export default function CoursePanel({
    * qu'un rendu ait eu lieu.
    */
   const anchor = useRef<ReadingAnchor | null>(null)
-  /**
-   * Vrai le temps d'un defilement que nous avons provoque. C'est le garde-fou
-   * anti-boucle : un defilement venu de la synchronisation ne doit pas en
-   * declencher un autre en retour, sinon les deux panneaux se poursuivent.
-   */
-  const driven = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const markDriven = useCallback(() => {
-    if (driven.current) clearTimeout(driven.current)
-    driven.current = setTimeout(() => {
-      driven.current = null
-    }, 400)
-  }, [])
-
   /**
    * Suit un renvoi du document : sommaire, retour au sommaire, note de bas de
    * page.
@@ -1665,12 +1718,34 @@ export default function CoursePanel({
     [target, add, recolour, rootForPage]
   )
 
-  /** La reference d'un passage, telle qu'elle sera citee dans une note ou a l'IA. */
-  const referenceOf = useCallback(
-    (page: number | null, heading: string | null): string =>
-      page !== null ? `p. ${page}` : (heading ?? course?.title ?? ''),
-    [course]
-  )
+  /**
+   * Le passage vise rejoint la barre de saisie de l'assistant.
+   *
+   * L'endroit n'est pas garde sous forme d'etendue mais retrouve a chaque fois
+   * qu'on le peint : la couche de texte d'une page de PDF n'existe que tant que
+   * la page est pres du cadre, et le document HTML est repose a chaque
+   * changement de grossissement. Le passage, lui, se retrouve par son texte et
+   * son voisinage — c'est deja ce qui raccroche les surlignages.
+   */
+  const quote = useCallback(() => {
+    if (!target) return
+    const { passage, page, heading } = target
+
+    onQuote({
+      text: passage.text,
+      source: quoteSource(page, heading),
+      origin: 'course',
+      locate: () => {
+        const root = rootForPage(page)
+        return root ? locateAnnotation(root, passage) : []
+      }
+    })
+
+    // La selection a fait son office : elle laisse la place au surlignage du
+    // passage retenu, que le bleu du systeme recouvrirait sinon.
+    window.getSelection()?.removeAllRanges()
+    setTarget(null)
+  }, [target, onQuote, rootForPage])
 
   // Les chiffres surlignent, tant qu'un passage est vise. Ils ne valent que
   // la : ailleurs, 1 a 5 sont des chiffres qu'on tape dans ses notes.
@@ -1928,7 +2003,10 @@ export default function CoursePanel({
 
       <div
         className="panel-body course-body"
-        ref={bodyRef}
+        ref={(element) => {
+          bodyRef.current = element
+          stageRef(element)
+        }}
         onMouseDown={() => {
           dragging.current = true
         }}
@@ -2032,10 +2110,7 @@ export default function CoursePanel({
             if (target.id) remove(target.id)
             setTarget(null)
           }}
-          onExplain={() => {
-            onExplain(target.passage.text, referenceOf(target.page, target.heading))
-            setTarget(null)
-          }}
+          onQuote={quote}
           onClose={() => setTarget(null)}
         />
       )}

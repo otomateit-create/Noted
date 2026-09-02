@@ -622,7 +622,10 @@
 .composer {
   flex: none;
   border-top: 1px solid var(--rule);
-  padding: var(--space-3);
+  /* Moins haut que large : la zone de saisie ne doit pas manger le fil. Un peu
+     plus de coussin en bas qu'en haut — le bord de la fenetre est juste
+     dessous, et le pied d'une zone se pose mieux qu'il ne se colle. */
+  padding: 8px var(--space-3) 10px;
   background: var(--paper);
 }
 
@@ -639,22 +642,22 @@
      de ChatGPT. */
   align-items: flex-end;
   gap: var(--space-2);
-  /* Le rond d'envoi (28 px) est plus haut qu'une ligne de texte : c'est lui
-     qui fixe la hauteur au repos, 12 + 28 + 12 = 52 px, quelle que soit la
+  /* Le rond d'envoi (24 px) est plus haut qu'une ligne de texte : c'est lui
+     qui fixe la hauteur au repos, 8 + 24 + 8 = 40 px, quelle que soit la
      taille de lecture. A gauche, un peu plus de marge : du texte est
      optiquement plus leger qu'un disque plein. Cliquer sur ces marges ramene
      au champ (`focusField`), sans quoi elles seraient des bandes mortes. */
-  padding: 12px 12px 12px 18px;
+  padding: 8px 8px 8px 16px;
   box-shadow: var(--shadow-panel);
   background: var(--paper-overlay);
   border: 1px solid var(--rule-strong);
-  /* 26 px, soit exactement la moitie des 52 px du repos : au repos la barre
+  /* 20 px, soit exactement la moitie des 40 px du repos : au repos la barre
      est donc une pilule pleine — la forme dit « on ecrit une phrase ici », la
      ou un rectangle annonce un formulaire —, et des qu'elle grandit elle
      devient un rectangle a coins francs au lieu de continuer a bomber. Un
      rayon de 999 px la transformait en lozenge des la troisieme ligne : les
      joues rondes mangeaient le texte et la fleche semblait posee dehors. */
-  border-radius: 26px;
+  border-radius: 20px;
   cursor: text;
   transition:
     border-color var(--fast) var(--ease),
@@ -702,14 +705,14 @@
   background: none;
   border: none;
   /* Sauf ce coussin-la, qui rattrape un decalage de la rangee. Le rond
-     d'envoi (28px) est plus haut qu'une ligne de texte, et c'est donc lui qui
+     d'envoi (24px) est plus haut qu'une ligne de texte, et c'est donc lui qui
      fixe la hauteur ; cale en bas par `align-items: flex-end`, le texte
-     tombait 3,5px sous le milieu de la pilule — assez pour se voir sur une
-     barre vide, ou la phrase est seule a regarder. La moitie de l'ecart,
-     posee sous le texte, le remonte sur l'axe sans toucher au repos de 52px
-     ni deranger la fleche, qui reste ou la main la cherche. `1lh` suit la
-     taille de lecture, qui se regle. */
-  padding: 0 0 max(0px, calc((28px - 1lh) / 2));
+     tombait sous le milieu de la pilule — assez pour se voir sur une barre
+     vide, ou la phrase est seule a regarder. La moitie de l'ecart, posee sous
+     le texte, le remonte sur l'axe sans toucher au repos de 40px ni deranger
+     la fleche, qui reste ou la main la cherche. `1lh` suit la taille de
+     lecture, qui se regle. */
+  padding: 0 0 max(0px, calc((24px - 1lh) / 2));
   user-select: text;
   cursor: text;
 }
@@ -736,13 +739,13 @@
    de la barre. */
 .composer-round-send {
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1;
   color: var(--on-brass);
   background: var(--brass-strong);
@@ -788,7 +791,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-2);
+  margin-top: 6px;
 }
 
 .composer-hint {
@@ -1140,11 +1143,19 @@
 
 /* La provenance, quand le passage ne vient pas du fil : « mes notes, p. 12 ».
    Elle se lit d'un coup d'oeil sans disputer sa place au passage lui-meme —
-   petite, en petites capitales, et jamais coupee : c'est elle qui distingue
-   deux puces dont le texte se ressemble. Meme jeton dans la barre de saisie et
-   dans la question envoyee, comme les pastilles numerotees. */
+   petite, en petites capitales : c'est elle qui distingue deux puces dont le
+   texte se ressemble. Meme jeton dans la barre de saisie et dans la question
+   envoyee, comme les pastilles numerotees.
+
+   Elle est ecrite en entier tant qu'elle tient, et coupee au bout plutot que
+   de chasser le passage hors de sa puce : un titre de section de cours HTML
+   prend la ligne entiere, la ou « p. 12 » prend quatre signes. */
 .quote-source {
   flex: none;
+  /* Jamais plus de la moitie de la puce : le passage cite garde la sienne. */
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--brass-line);

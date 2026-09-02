@@ -139,8 +139,8 @@ interface PendingQuote {
   id: string
   /**
    * La reponse d'ou il vient : s'il quitte le fil, la citation part avec lui.
-   * Null pour un passage mentionne depuis les notes, qui ne releve d'aucune
-   * reponse et ne disparait donc pas quand le fil change.
+   * Null pour un passage pris ailleurs — les notes, le cours —, qui ne releve
+   * d'aucune reponse et ne disparait donc pas quand le fil change.
    */
   messageId: string | null
   /**
@@ -148,13 +148,21 @@ interface PendingQuote {
    * C'est ce libelle qui part au modele dans le crochet de la citation.
    */
   source?: string
+  /** Le cadre ou il se peint, quand il n'a pas ete pris dans le fil. */
+  origin?: QuoteOrigin
   text: string
   /**
-   * Ou le peindre, a l'instant ou on le demande. Une reponse rend toujours la
-   * meme etendue — son HTML est memorise, ses noeuds ne bougent pas ; la
-   * feuille, elle, la recalcule depuis les positions qu'elle tient a jour.
+   * Ou le peindre, a l'instant ou on le demande. Une reponse rend toujours les
+   * memes etendues — son HTML est memorise, ses noeuds ne bougent pas ; la
+   * feuille et le cours, eux, les recalculent depuis ce qu'ils tiennent a jour.
+   *
+   * Une liste et non une seule etendue : un passage du cours traverse presque
+   * toujours plusieurs noeuds de texte — la couche de texte d'un PDF en pose un
+   * par ligne — et une etendue tendue d'un bout a l'autre engloberait les
+   * balises intermediaires, que le navigateur peindrait en pastilles perdues
+   * dans la marge. Vide quand le passage n'est plus a l'ecran.
    */
-  locate: () => Range | null
+  locate: () => Range[]
 }
 
 /** Un passage retenu, avec le rang sous lequel il se lit partout. */
@@ -179,10 +187,7 @@ function paintQuotes(quotes: PendingQuote[]): void {
   // Un passage que la feuille ne sait plus situer — efface pendant qu'on
   // ecrivait la question — n'est simplement pas peint. Il reste dans la barre
   // de saisie : son texte, lui, a ete pris et ne depend plus de rien.
-  const ranges = quotes.flatMap((quote) => {
-    const range = quote.locate()
-    return range && !range.collapsed ? [range] : []
-  })
+  const ranges = quotes.flatMap((quote) => quote.locate().filter((range) => !range.collapsed))
 
   if (ranges.length === 0) {
     CSS.highlights.delete(QUOTE_HIGHLIGHT)
@@ -232,16 +237,24 @@ const QUOTE_MARK_MIN_LEFT = 19
 /**
  * Le bord gauche de la colonne de texte ou vit ce passage.
  *
- * Dans une feuille de notes, la pastille ne se colle pas au premier mot du
- * passage : un passage pris au milieu d'une phrase — le cas ordinaire quand on
- * relit ce qu'on vient d'ecrire — verrait alors son numero pose en plein texte,
- * par-dessus le mot d'avant. Elle se range dans la marge, la ou vivent deja les
- * reperes de page, et ne recouvre jamais ce qui a ete ecrit.
+ * La pastille ne se colle pas au premier mot du passage : un passage pris au
+ * milieu d'une phrase — le cas ordinaire, qu'on relise ce qu'on vient d'ecrire
+ * ou qu'on cite une incise du cours — verrait alors son numero pose en plein
+ * texte, par-dessus le mot d'avant. Elle se range dans la marge du bloc, la ou
+ * vivent deja les reperes de page, et ne recouvre jamais ce qui est ecrit.
+ *
+ * Les blocs de premier niveau pour la feuille de notes, les blocs de texte
+ * ordinaires pour un cours. La couche de texte d'un PDF n'en a aucun — ses
+ * lignes sont posees au pixel pres — et retombe sur le debut du passage, qui y
+ * est presque toujours un debut de ligne.
  */
+const COLUMN_BLOCK =
+  '.notes-editor > *, p, li, h1, h2, h3, h4, h5, h6, blockquote, dd, dt, figcaption, td, pre'
+
 function columnLeft(range: Range, fallback: number): number {
   const node = range.startContainer
   const element = node instanceof HTMLElement ? node : node.parentElement
-  const block = element?.closest<HTMLElement>('.notes-editor > *')
+  const block = element?.closest<HTMLElement>(COLUMN_BLOCK)
   return block ? block.getBoundingClientRect().left : fallback
 }
 
@@ -286,7 +299,7 @@ function QuoteMarks({
       const base = element.getBoundingClientRect()
       setMarks(
         quotes.flatMap((quote) => {
-          const range = quote.locate()
+          const range = quote.locate()[0]
           // Le premier rectangle : celui de la premiere ligne du passage, la ou
           // le regard entre. Un passage sur trois lignes en a trois.
           const box = range?.getClientRects()[0]
@@ -337,33 +350,39 @@ export interface ChatAsk {
   prompt: string
 }
 
+/** Le cadre d'ou vient un passage cite hors du fil, et ou sa pastille se pose. */
+export type QuoteOrigin = 'notes' | 'course'
+
 /**
- * Un passage des notes accroche a la question en cours — « Mentionner » sur une
- * selection de la feuille.
+ * Un passage accroche a la question en cours — « Mentionner » dans la feuille,
+ * « Citer » sur une selection du cours.
  *
  * A la difference de `ChatAsk`, rien ne part tout de suite : le passage rejoint
  * la barre de saisie et attend la question qu'on veut poser dessus. C'est la
  * meme mecanique que citer une reponse, prise a l'autre bout de l'ecran.
  *
- * L'etendue voyage avec le texte : c'est elle qui peint le passage dans la
- * feuille et qui y place sa pastille, le temps que la question s'ecrive.
+ * L'etendue voyage avec le texte : c'est elle qui peint le passage la ou il
+ * vit et qui y place sa pastille, le temps que la question s'ecrive.
  */
 export interface ChatMention {
   text: string
   /** « mes notes, p. 12 » — ce que le crochet de la citation dira au modele. */
   source: string
+  /** Le cadre ou le passage vit, et ou sa pastille ira se poser. */
+  origin: QuoteOrigin
   /**
-   * Ou le passage se trouve dans la feuille, a l'instant ou on le demande, ou
-   * null s'il n'y est plus.
+   * Ou le passage se trouve, a l'instant ou on le demande, ou rien s'il n'y est
+   * plus.
    *
-   * Une fonction et non une etendue : dans un editeur, aucun noeud n'est
-   * stable. Perdre le focus suffit a ce que le bloc soit repose — le plugin
-   * d'ancrage y fige alors la page qu'on lisait — et une etendue gardee telle
-   * quelle se replie aussitot sur le vide. Les notes suivent donc leur passage
-   * en positions de document, qui traversent les modifications, et n'en tirent
-   * une etendue qu'au moment de peindre.
+   * Une fonction et non une etendue : ni dans un editeur ni dans un document
+   * affiche les noeuds ne sont stables. Perdre le focus suffit a ce qu'un bloc
+   * de notes soit repose — le plugin d'ancrage y fige alors la page qu'on
+   * lisait — et une page de PDF quittee jette sa couche de texte. Les notes
+   * suivent donc leur passage en positions de document, le cours le retrouve
+   * par son texte et son voisinage ; l'un comme l'autre n'en tirent une etendue
+   * qu'au moment de peindre.
    */
-  locate: () => Range | null
+  locate: () => Range[]
 }
 
 interface ChatPanelProps {
@@ -382,7 +401,7 @@ interface ChatPanelProps {
   ask: ChatAsk | null
   /** Previent qu'elle est partie, pour qu'elle ne reparte pas au rendu suivant. */
   onAsked: () => void
-  /** Passage des notes a accrocher a la question en cours. */
+  /** Passage des notes ou du cours a accrocher a la question en cours. */
   mention: ChatMention | null
   /** Previent qu'il est pris, pour qu'il ne soit pas repris au rendu suivant. */
   onMentioned: () => void
@@ -392,6 +411,8 @@ interface ChatPanelProps {
    * restent alors dans la barre de saisie, sans repere en face.
    */
   notesStage: HTMLElement | null
+  /** Le cadre du cours, pour les pastilles des passages cites du document. */
+  courseStage: HTMLElement | null
   onToggleExpand: () => void
   onOpenPage?: (page: number) => void
   /** Recopie une reponse en fin de note. */
@@ -426,6 +447,7 @@ export default function ChatPanel({
   mention,
   onMentioned,
   notesStage,
+  courseStage,
   onToggleExpand,
   onOpenPage,
   onInsertToNotes,
@@ -668,7 +690,7 @@ export default function ChatPanel({
           id: `q-${nextQuoteId.current}`,
           messageId: cite.messageId,
           text: cite.text,
-          locate: () => range
+          locate: () => [range]
         }
       ]
     })
@@ -698,27 +720,33 @@ export default function ChatPanel({
     () => numbered.filter((quote) => quote.messageId !== null),
     [numbered]
   )
-  const noteMarks = useMemo(
-    () => numbered.filter((quote) => quote.messageId === null),
+  const noteMarks = useMemo(() => numbered.filter((quote) => quote.origin === 'notes'), [numbered])
+  const courseMarks = useMemo(
+    () => numbered.filter((quote) => quote.origin === 'course'),
     [numbered]
   )
 
   /**
-   * Ce qui fait redessiner les passages de la feuille quand elle bouge sous
+   * Ce qui fait redessiner les passages pris ailleurs quand le cadre bouge sous
    * eux.
    *
    * Leurs positions se mettent a jour toutes seules — la feuille les suit a
-   * travers les modifications — mais rien ne dit ici qu'il faut les repeindre.
-   * Le premier changement arrive des le clic sur « Mentionner » : le focus part
-   * a la barre de saisie, l'editeur repose le bloc quitte, et une etendue
-   * calculee avant ce moment-la ne montrerait rien.
+   * travers les modifications, le cours les retrouve par leur texte — mais rien
+   * ne dit ici qu'il faut les repeindre. Le premier changement arrive des le
+   * clic : le focus part a la barre de saisie, l'editeur repose le bloc quitte,
+   * et une etendue calculee avant ce moment-la ne montrerait rien. Cote cours,
+   * c'est une page de PDF qui se peint ou se demonte au fil du defilement.
    *
    * L'observateur n'est arme que tant qu'un passage attend, et se contente de
    * compter : un rendu par salve de modifications, pas un par noeud touche.
    */
   const [pulse, setPulse] = useState(0)
   useEffect(() => {
-    if (!notesStage || noteMarks.length === 0) return undefined
+    const stages = [
+      noteMarks.length > 0 ? notesStage : null,
+      courseMarks.length > 0 ? courseStage : null
+    ].filter((stage): stage is HTMLElement => stage !== null)
+    if (stages.length === 0) return undefined
 
     let queued = false
     const observer = new MutationObserver(() => {
@@ -729,9 +757,11 @@ export default function ChatPanel({
         setPulse((tick) => tick + 1)
       })
     })
-    observer.observe(notesStage, { childList: true, subtree: true, characterData: true })
+    for (const stage of stages) {
+      observer.observe(stage, { childList: true, subtree: true, characterData: true })
+    }
     return () => observer.disconnect()
-  }, [notesStage, noteMarks.length])
+  }, [notesStage, courseStage, noteMarks.length, courseMarks.length])
 
   useEffect(() => {
     paintQuotes(quotes)
@@ -747,9 +777,9 @@ export default function ChatPanel({
     setQuotes((current) => {
       const kept = current.filter(
         (quote) =>
-          // Un passage des notes ne releve d'aucune reponse : il survit a
-          // « Nouveau » comme a une reprise d'historique, puisque la feuille,
-          // elle, n'a pas bouge.
+          // Un passage des notes ou du cours ne releve d'aucune reponse : il
+          // survit a « Nouveau » comme a une reprise d'historique, puisque la
+          // feuille et le document, eux, n'ont pas bouge.
           quote.messageId === null ||
           messages.some((message) => message.id === quote.messageId)
       )
@@ -758,9 +788,10 @@ export default function ChatPanel({
   }, [messages])
 
   /**
-   * Changer de cours emporte les passages des notes : la feuille est remplacee,
-   * leur etendue ne designe plus rien, et la question qu'on ecrivait portait sur
-   * un autre cours. Ceux du fil partent d'eux-memes avec la conversation.
+   * Changer de cours emporte les passages des notes et du document : la feuille
+   * et le cours sont remplaces, leur etendue ne designe plus rien, et la
+   * question qu'on ecrivait portait sur un autre cours. Ceux du fil partent
+   * d'eux-memes avec la conversation.
    */
   useEffect(() => {
     setQuotes((current) => {
@@ -770,8 +801,8 @@ export default function ChatPanel({
   }, [course?.id])
 
   /**
-   * Un passage des notes vient d'etre mentionne : il rejoint la barre de saisie
-   * et lui rend la main, pour que la question s'ecrive dans la foulee.
+   * Un passage des notes ou du cours vient d'etre pris : il rejoint la barre de
+   * saisie et lui rend la main, pour que la question s'ecrive dans la foulee.
    *
    * Meme garde que pour `ask`, et pour la meme raison : l'effet peut retourner
    * entre l'ajout et le rendu qui rend la demande — il le fait deux fois
@@ -785,7 +816,7 @@ export default function ChatPanel({
 
     setQuotes((current) => {
       const already = current.some(
-        (quote) => quote.messageId === null && quote.text === mention.text
+        (quote) => quote.origin === mention.origin && quote.text === mention.text
       )
       if (already) return current
 
@@ -795,6 +826,7 @@ export default function ChatPanel({
         {
           id: `q-${nextQuoteId.current}`,
           messageId: null,
+          origin: mention.origin,
           source: mention.source,
           text: mention.text,
           locate: mention.locate
@@ -939,14 +971,21 @@ export default function ChatPanel({
         <QuoteMarks quotes={answerMarks} frame={thread} pulse={messages} />
       </div>
 
-      {/* Les pastilles des passages mentionnes se posent dans la feuille, pas
-          ici : c'est la que se trouve le texte qu'elles numerotent. Le calque
-          est envoye dans le cadre des notes, qui defile avec le texte comme le
-          fil defile avec les reponses. */}
+      {/* Les pastilles des passages pris ailleurs se posent la ou se trouve le
+          texte qu'elles numerotent, pas ici : le calque est envoye dans le
+          cadre des notes ou dans celui du cours, qui defilent avec leur texte
+          comme le fil defile avec les reponses. */}
       {notesStage && noteMarks.length > 0
         ? createPortal(
             <QuoteMarks quotes={noteMarks} frame={notesStage} pulse={pulse} gutter />,
             notesStage
+          )
+        : null}
+
+      {courseStage && courseMarks.length > 0
+        ? createPortal(
+            <QuoteMarks quotes={courseMarks} frame={courseStage} pulse={pulse} gutter />,
+            courseStage
           )
         : null}
 

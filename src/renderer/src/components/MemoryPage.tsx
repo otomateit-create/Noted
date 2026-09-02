@@ -90,8 +90,8 @@ export default function MemoryPage({ open, onOpen: setOpen }: MemoryPageProps): 
       <div className="hub-page-inner">
         <h1 className="hub-page-title">Mémoire</h1>
         <p className="hub-page-lede">
-          Ce que l'assistant retient de toi, d'une session à l'autre. Il écrit ici de lui-même —
-          chaque écriture laisse une trace annulable sous sa réponse — et retrouve ces entrées par
+          Ce que l'assistant retient de toi, d'une session à l'autre. Il écrit ici de lui-même,
+          chaque écriture laisse une trace annulable sous sa réponse, et retrouve ces entrées par
           recherche. Les fichiers vivent dans Memoire/, éditables dans Obsidian.
         </p>
 

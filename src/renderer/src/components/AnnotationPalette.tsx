@@ -9,7 +9,8 @@ interface AnnotationPaletteProps {
   onPick: (colour: HighlightColorId) => void
   onComment: (comment: string) => void
   onRemove: () => void
-  onExplain: () => void
+  /** Accroche le passage a la question posee a l'assistant. */
+  onQuote: () => void
   onClose: () => void
 }
 
@@ -30,7 +31,7 @@ export default function AnnotationPalette({
   onPick,
   onComment,
   onRemove,
-  onExplain,
+  onQuote,
   onClose
 }: AnnotationPaletteProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
@@ -114,8 +115,12 @@ export default function AnnotationPalette({
         >
           Note
         </button>
-        <button className="palette-action" onClick={onExplain} title="Demander à Claude">
-          Expliquer
+        <button
+          className="palette-action"
+          onClick={onQuote}
+          title="Citer ce passage à l’assistant : il rejoint la barre de saisie, numéroté"
+        >
+          Citer
         </button>
 
         {annotation && (

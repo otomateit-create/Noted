@@ -11,10 +11,21 @@
 const SPOT_PREFIX = 'noted.lecture.'
 
 export interface ReadingSpot {
-  /** Page atteinte, pour un PDF. */
-  page?: number
-  /** Defilement en pixels, pour un document sans pagination. */
-  scroll?: number
+  /**
+   * L'endroit ou l'on s'est arrete : le rang du bloc que la ligne de lecture
+   * traversait, et la fraction parcourue de ce bloc.
+   *
+   * Un rang et une fraction, jamais des pixels : le defilement d'un document
+   * depend de la largeur du panneau et du grossissement, qui changent d'une
+   * session a l'autre — repris tel quel, il retombe ailleurs, et sur un
+   * document dont les images arrivent apres coup il retombe au debut. Le
+   * troisieme paragraphe, lui, reste le troisieme paragraphe.
+   *
+   * Les blocs sont ceux que le panneau donne a la ligne de lecture : une page
+   * pour un PDF, un paragraphe ou un titre pour les autres formats. Un PDF
+   * revient donc a la bonne hauteur dans la bonne page, et non en tete de page.
+   */
+  block?: { index: number; offset: number }
   /**
    * Grossissement du document, 1 valant la largeur du panneau. Retenu par
    * cours et non une fois pour toutes : un support de diapositives se lit de

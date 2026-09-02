@@ -1662,11 +1662,17 @@ export default function NotesPanel({
     }
   }, [editor])
 
-  /** L'etendue d'un passage mentionne, telle qu'elle est a cet instant. */
+  /**
+   * L'etendue d'un passage mentionne, telle qu'elle est a cet instant.
+   *
+   * Une liste d'une etendue au plus : c'est ce que l'assistant attend de tous
+   * ses passages, un passage du cours pouvant en demander plusieurs. Ici le
+   * texte est continu dans un seul editeur, une etendue suffit.
+   */
   const locateMention = useCallback(
-    (id: string): Range | null => {
+    (id: string): Range[] => {
       const span = mentions.current.get(id)
-      if (!editor || !span) return null
+      if (!editor || !span) return []
 
       try {
         const start = editor.view.domAtPos(span.from)
@@ -1674,10 +1680,10 @@ export default function NotesPanel({
         const range = document.createRange()
         range.setStart(start.node, start.offset)
         range.setEnd(end.node, end.offset)
-        return range
+        return [range]
       } catch {
         // `domAtPos` refuse une position que le document ne contient plus.
-        return null
+        return []
       }
     },
     [editor]
@@ -1693,6 +1699,7 @@ export default function NotesPanel({
     onMention({
       text: cite.text,
       source: mentionSource(),
+      origin: 'notes',
       locate: () => locateMention(id)
     })
 

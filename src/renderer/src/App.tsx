@@ -196,6 +196,8 @@ export default function App(): React.JSX.Element {
    * disparaitre, et celui qui dessine dedans doit l'apprendre.
    */
   const [notesStage, setNotesStage] = useState<HTMLElement | null>(null)
+  /** Le cadre du cours, ou se posent les pastilles des passages cites du document. */
+  const [courseStage, setCourseStage] = useState<HTMLElement | null>(null)
 
   // --- Le lien vivant entre le cours et les notes ---------------------------
   //
@@ -506,21 +508,12 @@ export default function App(): React.JSX.Element {
     [setCourseId, pushLocation]
   )
 
-  /** Un passage du cours part vers l'assistant, qui s'ouvre s'il etait replie. */
-  const explainPassage = useCallback((text: string, reference: string) => {
-    setPanneaux((current) => ({ ...current, chat: true }))
-    setFocus(null)
-    setChatAsk({
-      prompt: `Explique-moi ce passage de mon cours (${reference}) :\n\n« ${text} »`
-    })
-  }, [])
-
   const clearAsk = useCallback(() => setChatAsk(null), [])
 
   /**
-   * Un passage des notes rejoint la barre de saisie de l'assistant, qui s'ouvre
-   * s'il etait replie. Rien ne part : la question s'ecrit ensuite, le passage
-   * accroche dessous.
+   * Un passage des notes ou du cours rejoint la barre de saisie de l'assistant,
+   * qui s'ouvre s'il etait replie. Rien ne part : la question s'ecrit ensuite,
+   * le passage accroche dessous.
    */
   const mentionPassage = useCallback((mention: ChatMention) => {
     setPanneaux((current) => ({ ...current, chat: true }))
@@ -742,7 +735,8 @@ export default function App(): React.JSX.Element {
             findOpen={findOpen}
             onCloseFind={() => setFindOpen(false)}
             onToggleExpand={() => toggleFocus('course')}
-            onExplain={explainPassage}
+            onQuote={mentionPassage}
+            stageRef={setCourseStage}
             onReading={handleReading}
             onVisibleUnits={setVisibleUnits}
             onSections={setSections}
@@ -808,6 +802,7 @@ export default function App(): React.JSX.Element {
               mention={chatMention}
               onMentioned={clearMention}
               notesStage={panneaux.notes ? notesStage : null}
+            courseStage={courseStage}
               onToggleExpand={() => toggleFocus('chat')}
               onOpenPage={openPage}
               onInsertToNotes={insertResponse}
