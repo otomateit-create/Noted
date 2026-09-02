@@ -19,7 +19,7 @@
     [data-view='memoire'],
     [data-view='subject']
   ) {
-  background: color-mix(in srgb, rgb(196 146 40) 10%, var(--paper-deep));
+  background: color-mix(in srgb, rgb(196 146 40) 10%, var(--paper-raised));
 }
 
 /* Le premier ecran est desormais le tableau de bord : l'image d'attente prend

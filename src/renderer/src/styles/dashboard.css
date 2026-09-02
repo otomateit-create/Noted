@@ -14,7 +14,6 @@
   overflow-y: auto;
   padding: var(--space-8) var(--space-5);
   font-family: var(--font-system);
-  background: var(--paper-raised);
 }
 
 .home-inner {
