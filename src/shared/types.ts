@@ -1621,6 +1621,8 @@ export interface NotedApi {
     history(courseId: string): Promise<ChatHistoryEntry[]>
     /** Reprend une conversation choisie dans l'historique ; rend son fil. */
     openSession(courseId: string, sessionId: string): Promise<ChatMessage[]>
+    /** Efface definitivement une conversation passee de ce cours. */
+    deleteSession(courseId: string, sessionId: string): Promise<void>
     /**
      * A l'ouverture d'un cours dont le fil n'est pas deja en memoire : reprend
      * la derniere conversation si elle existe, ou rend null s'il n'y en a

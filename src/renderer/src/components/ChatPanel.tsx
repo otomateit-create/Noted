@@ -466,6 +466,7 @@ export default function ChatPanel({
     skipQuiz,
     history,
     openSession,
+    removeSession,
     compact
   } =
     useChat(course?.id ?? null)
@@ -920,6 +921,7 @@ export default function ChatPanel({
             disabled={!course}
             loadHistory={history}
             onPick={(sessionId) => void openSession(sessionId)}
+            onDelete={removeSession}
           />
 
           {messages.length > 0 && (
@@ -1236,14 +1238,24 @@ function Picker({
 function HistoryPicker({
   disabled,
   loadHistory,
-  onPick
+  onPick,
+  onDelete
 }: {
   disabled: boolean
   loadHistory: () => Promise<ChatHistoryEntry[]>
   onPick: (sessionId: string) => void
+  onDelete: (sessionId: string, wasActive: boolean) => Promise<void>
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [entries, setEntries] = useState<ChatHistoryEntry[] | null>(null)
+  /**
+   * La conversation dont la croix a ete cliquee une premiere fois.
+   *
+   * Une suppression de transcript est definitive et ne se retrouve nulle part :
+   * la croix arme, le second clic execute. Deux gestes plutot qu'une boite de
+   * dialogue, qui interromprait pour un geste qu'on fait a la volee.
+   */
+  const [armed, setArmed] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -1265,6 +1277,7 @@ function HistoryPicker({
   }, [open])
 
   const toggle = useCallback(() => {
+    setArmed(null)
     setOpen((value) => {
       const next = !value
       if (next) {
@@ -1274,6 +1287,21 @@ function HistoryPicker({
       return next
     })
   }, [loadHistory])
+
+  /**
+   * Efface la conversation, puis relit la liste plutot que de la retirer sur
+   * place : c'est le CLI qui detient la verite, et une suppression refusee doit
+   * faire reapparaitre la ligne au lieu de la laisser disparue a l'ecran.
+   */
+  const remove = useCallback(
+    async (entry: ChatHistoryEntry) => {
+      setArmed(null)
+      setEntries(null)
+      await onDelete(entry.sessionId, entry.active)
+      setEntries(await loadHistory())
+    },
+    [onDelete, loadHistory]
+  )
 
   return (
     <div className="history-picker" ref={ref}>
@@ -1296,20 +1324,41 @@ function HistoryPicker({
             <div className="history-empty">Aucune conversation enregistrée pour ce cours.</div>
           )}
           {entries?.map((entry) => (
-            <button
-              key={entry.sessionId}
-              className="history-item"
-              role="option"
-              aria-selected={entry.active}
-              data-active={entry.active}
-              onClick={() => {
-                onPick(entry.sessionId)
-                setOpen(false)
-              }}
-            >
-              <span className="history-item-title">{entry.title}</span>
-              <span className="history-item-date">{historyLabel(entry.lastModified)}</span>
-            </button>
+            <div className="history-row" key={entry.sessionId} data-armed={armed === entry.sessionId}>
+              <button
+                className="history-item"
+                role="option"
+                aria-selected={entry.active}
+                data-active={entry.active}
+                onClick={() => {
+                  onPick(entry.sessionId)
+                  setOpen(false)
+                }}
+              >
+                <span className="history-item-title">{entry.title}</span>
+                <span className="history-item-date">{historyLabel(entry.lastModified)}</span>
+              </button>
+
+              <button
+                className="history-drop"
+                onClick={() =>
+                  armed === entry.sessionId ? void remove(entry) : setArmed(entry.sessionId)
+                }
+                onBlur={() => setArmed((value) => (value === entry.sessionId ? null : value))}
+                title={
+                  armed === entry.sessionId
+                    ? 'Confirmer : cette conversation sera définitivement effacée'
+                    : 'Effacer cette conversation'
+                }
+                aria-label={
+                  armed === entry.sessionId
+                    ? `Confirmer la suppression de « ${entry.title} »`
+                    : `Effacer « ${entry.title} »`
+                }
+              >
+                {armed === entry.sessionId ? 'Effacer ?' : '✕'}
+              </button>
+            </div>
           ))}
         </div>
       )}

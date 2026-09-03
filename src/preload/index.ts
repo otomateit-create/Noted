@@ -345,6 +345,8 @@ const api: NotedApi = {
       ipcRenderer.invoke(CHANNELS.claudeHistory, courseId),
     openSession: (courseId: string, sessionId: string): Promise<ChatMessage[]> =>
       ipcRenderer.invoke(CHANNELS.claudeOpenSession, courseId, sessionId),
+    deleteSession: (courseId: string, sessionId: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.claudeDeleteSession, courseId, sessionId),
     hydrate: (
       courseId: string
     ): Promise<{ sessionId: string; messages: ChatMessage[] } | null> =>

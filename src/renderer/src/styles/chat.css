@@ -958,18 +958,71 @@
   color: var(--text-ghost);
 }
 
+/* La rangee porte le survol pour ses deux boutons : sans elle, la croix
+   s'allumerait sur un fond qui, lui, ne reagit pas — la ligne se lirait comme
+   deux objets separes au lieu d'une conversation et son geste. */
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.history-row:hover {
+  background: var(--hover);
+}
+
 .history-item {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  width: 100%;
+  /* La croix prend sa place a droite ; le titre cede, pas l'inverse. */
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 6px var(--space-2);
   border-radius: var(--radius-sm);
   text-align: left;
 }
 
-.history-item:hover {
-  background: var(--hover);
+/* La croix ne se montre qu'au survol de sa rangee — ou tant qu'elle est
+   armee, sinon la confirmation disparaitrait des que la souris glisse. */
+.history-drop {
+  flex: none;
+  padding: 4px 6px;
+  margin-right: 2px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-ghost);
+  opacity: 0;
+  transition:
+    opacity var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+.history-row:hover .history-drop,
+.history-drop:focus-visible {
+  opacity: 1;
+}
+
+.history-drop:hover {
+  color: var(--hl-incompris);
+  background: rgba(192, 57, 43, 0.1);
+}
+
+/* Armee : elle cesse de se cacher, prend le mot et la couleur du danger. Le
+   second clic est alors le seul geste que la ligne propose encore. */
+.history-row[data-armed='true'] .history-drop {
+  opacity: 1;
+  font-size: var(--text-xs);
+  color: var(--hl-incompris);
+  background: rgba(192, 57, 43, 0.1);
+}
+
+.history-row[data-armed='true'] .history-item-title {
+  color: var(--text-ghost);
+  text-decoration: line-through;
 }
 
 .history-item-title {
@@ -982,7 +1035,7 @@
   color: var(--text-dim);
 }
 
-.history-item:hover .history-item-title {
+.history-row:hover .history-item-title {
   color: var(--text);
 }
 

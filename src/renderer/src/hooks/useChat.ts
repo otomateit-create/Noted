@@ -376,6 +376,22 @@ export function useChat(courseId: string | null) {
   )
 
   /**
+   * Efface definitivement une conversation passee.
+   *
+   * Si c'etait celle affichee, le fil repart vide : laisser a l'ecran le
+   * contenu d'un transcript qu'on vient de supprimer donnerait un fil qu'on
+   * croit pouvoir reprendre alors qu'il n'existe plus.
+   */
+  const removeSession = useCallback(
+    async (sessionId: string, wasActive: boolean) => {
+      if (!courseId) return
+      await window.noted.claude.deleteSession(courseId, sessionId)
+      if (wasActive) setThreads((previous) => ({ ...previous, [courseId]: [] }))
+    },
+    [courseId]
+  )
+
+  /**
    * Compacte la conversation en cours : un repere « system » rejoint le fil,
    * succes ou echec, plutot qu'une paire question/reponse ordinaire.
    */
@@ -408,6 +424,7 @@ export function useChat(courseId: string | null) {
     skipQuiz,
     history,
     openSession,
+    removeSession,
     compact
   }
 }

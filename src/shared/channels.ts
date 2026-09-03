@@ -78,6 +78,8 @@ export const CHANNELS = {
   claudeHistory: 'claude:history',
   /** Reprend une conversation passee comme fil actif du cours. */
   claudeOpenSession: 'claude:open-session',
+  /** Efface definitivement une conversation passee du cours. */
+  claudeDeleteSession: 'claude:delete-session',
   /** Reprend la derniere conversation d'un cours a la premiere ouverture. */
   claudeHydrate: 'claude:hydrate',
   /** Compacte la conversation en cours d'un cours. */

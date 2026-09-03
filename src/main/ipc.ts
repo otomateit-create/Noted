@@ -793,6 +793,13 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     )
   })
 
+  ipcMain.handle(CHANNELS.claudeDeleteSession, (_event, courseId: unknown, sessionId: unknown) => {
+    return claudeSession.deleteSession(
+      expectString(courseId, 'Identifiant de cours'),
+      expectString(sessionId, 'Identifiant de session')
+    )
+  })
+
   ipcMain.handle(CHANNELS.claudeHydrate, (_event, courseId: unknown) => {
     return claudeSession.hydrate(expectString(courseId, 'Identifiant de cours'))
   })

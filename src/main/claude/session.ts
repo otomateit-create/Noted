@@ -821,13 +821,30 @@ export function reset(courseId: string): void {
  * sessions du vault partagent le meme dossier de travail (`cwd`) : seule
  * l'etiquette posee par `send` a la creation les rattache a leur cours.
  */
+/**
+ * Deux ecritures du meme nom, jamais egales pour `===`.
+ *
+ * macOS rend les noms de fichiers en NFD — « é » y est la paire « e » +
+ * accent combinant (U+0301) —, et l'identifiant d'un cours est fabrique a
+ * partir du chemin sur le disque : il est donc decompose. Le CLI, lui,
+ * enregistre l'etiquette de session en NFC, ou « é » tient en un seul point
+ * de code (U+00E9). Les deux s'affichent a l'identique, se comparent faux.
+ *
+ * Sans cette normalisation, l'historique d'un cours accentue est
+ * silencieusement vide — « Finance de marché » n'a jamais aucune conversation,
+ * pendant que « Investment Banking » les retrouve toutes.
+ */
+function sameCourse(tag: string | null | undefined, courseId: string): boolean {
+  return typeof tag === 'string' && tag.normalize('NFC') === courseId.normalize('NFC')
+}
+
 export async function historyFor(courseId: string): Promise<ChatHistoryEntry[]> {
   const sdk = await loadSdk()
   const all = await sdk.listSessions({ dir: vaultPaths().root, includeProgrammatic: true })
   const activeId = sessions.get(courseId)?.sessionId
 
   return all
-    .filter((entry) => entry.tag === courseId)
+    .filter((entry) => sameCourse(entry.tag, courseId))
     .sort((a, b) => b.lastModified - a.lastModified)
     .map((entry) => ({
       sessionId: entry.sessionId,
@@ -836,6 +853,39 @@ export async function historyFor(courseId: string): Promise<ChatHistoryEntry[]> 
       lastModified: entry.lastModified,
       active: entry.sessionId === activeId
     }))
+}
+
+/**
+ * Efface definitivement une conversation passee de ce cours.
+ *
+ * Le transcript appartient au CLI, pas au vault : c'est lui qui le supprime.
+ * On verifie d'abord que la session demandee porte bien l'etiquette de ce
+ * cours — le renderer ne devrait jamais en envoyer une autre, mais effacer
+ * sur simple identifiant ouvrirait la porte a la suppression de la
+ * conversation d'un autre cours sur une simple faute de frappe.
+ *
+ * Si c'etait le fil actif, la session en memoire est oubliee : le prochain
+ * message repart d'une conversation neuve plutot que de tenter de reprendre
+ * un transcript qui n'existe plus.
+ */
+export async function deleteSession(courseId: string, sessionId: string): Promise<void> {
+  const sdk = await loadSdk()
+  const root = vaultPaths().root
+
+  const all = await sdk.listSessions({ dir: root, includeProgrammatic: true })
+  const target = all.find((entry) => entry.sessionId === sessionId)
+  if (!target || !sameCourse(target.tag, courseId)) {
+    throw new Error("Cette conversation n'appartient pas à ce cours.")
+  }
+
+  await sdk.deleteSession(sessionId, { dir: root })
+
+  const session = sessions.get(courseId)
+  if (session?.sessionId === sessionId) {
+    interrupt(courseId)
+    session.sessionId = undefined
+    session.turns = 0
+  }
 }
 
 /**
