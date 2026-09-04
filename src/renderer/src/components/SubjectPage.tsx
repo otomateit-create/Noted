@@ -1,18 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, FolderInput, FolderPlus, Pencil, Plus, Trash2 } from 'lucide-react'
-import type {
-  Course,
-  CourseFormat,
-  CourseMove,
-  PendingConversion,
-  PhotoProposal,
-  Subject
-} from '@shared/types'
+import type { Course, CourseFormat, CourseMove, Subject } from '@shared/types'
 import { readableError } from '../lib/errors'
 import { coursePreview, type Preview } from '../lib/preview'
 import { detectSubjectTheme } from '../lib/subject-theme'
 import type { SubjectHue } from '../lib/subject-tint'
-import { PhotoOrderDialog } from './PhotoOrder'
 import '../styles/subject-page.css'
 
 interface SubjectPageProps {
@@ -49,13 +41,6 @@ export default function SubjectPage({
 }: SubjectPageProps): React.JSX.Element {
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /**
-   * L'ordre propose pour des images qui viennent d'etre choisies, tant qu'il
-   * n'est pas accepte. Rien n'est encore ecrit : abandonner ne laisse rien.
-   */
-  const [proposal, setProposal] = useState<PhotoProposal | null>(null)
-  /** Les cours de cette matiere en train d'etre lus. Ils n'existent pas encore. */
-  const [pending, setPending] = useState<PendingConversion[]>([])
   /** Les dossiers replies. Deplies par defaut : un classement ne cache rien. */
   const [shut, setShut] = useState<ReadonlySet<string>>(new Set())
   /** Vrai quand le champ « Nouveau dossier » de l'en-tete attend un nom. */
@@ -79,23 +64,6 @@ export default function SubjectPage({
       return next
     })
 
-  // La lecture dure des minutes : sans cette ligne, importer des photos depuis
-  // cette page n'y produirait rien de visible, et le geste passerait pour perdu.
-  useEffect(() => {
-    const load = (): void => {
-      void window.noted.ocr
-        .pending()
-        .then((entries) => setPending(entries.filter((entry) => entry.subject === subject.name)))
-    }
-    load()
-
-    return window.noted.ocr.onPendingChanged(() => {
-      load()
-      // Une lecture qui s'acheve fait apparaitre un vrai cours dans la matiere.
-      void onImported()
-    })
-  }, [subject.name, onImported])
-
   /**
    * `folder` a null depose a la racine de la matiere ; un nom range dans ce
    * dossier, cree s'il manque. Un import abandonne dans le selecteur ne cree
@@ -106,11 +74,8 @@ export default function SubjectPage({
     setError(null)
     setNaming(false)
     try {
-      const { photos } = await window.noted.vault.importCourses(subject.name, folder)
+      await window.noted.vault.importCourses(subject.name, folder)
       await onImported()
-      // Les images ne sont pas des cours : elles se lisent, et leur ordre
-      // demande un accord avant que la lecture ne parte.
-      if (photos) setProposal(photos)
     } catch (cause) {
       setError(readableError(cause, "L'import a échoué."))
     } finally {
@@ -164,7 +129,7 @@ export default function SubjectPage({
                 className="glass-button"
                 disabled={importing}
                 onClick={() => void importCourses(null)}
-                title="PDF, Word, PowerPoint, Markdown, HTML — ou des photos et captures d’écran, qui deviendront un seul cours"
+                title="PDF, Word, PowerPoint, Markdown, HTML"
               >
                 {importing ? 'Import…' : 'Importer des cours'}
               </button>
@@ -179,11 +144,10 @@ export default function SubjectPage({
 
           // La racine s'efface quand tout est range ailleurs : un grand cadre
           // vide au-dessus des dossiers ne dirait rien de plus que le bouton
-          // « Importer des cours ». Elle revient des qu'un cours l'occupe, ou
-          // qu'une lecture de photos s'y annonce — celles-ci n'atterrissent
-          // nulle part ailleurs. Une matiere entierement vide, elle, garde sa
-          // tuile : c'est sa seule invitation.
-          if (folder === null && courses.length === 0 && pending.length === 0 && folders.length > 0) {
+          // « Importer des cours ». Elle revient des qu'un cours l'occupe. Une
+          // matiere entierement vide, elle, garde sa tuile : c'est sa seule
+          // invitation.
+          if (folder === null && courses.length === 0 && folders.length > 0) {
             return null
           }
 
@@ -205,17 +169,6 @@ export default function SubjectPage({
 
               {!closed && (
                 <div className="matter-grid">
-                  {/* Un cours lu depuis des photos arrive toujours a la racine :
-                      sa file d'attente ne connait pas les dossiers. */}
-                  {folder === null &&
-                    pending.map((entry) => (
-                      <PendingCard
-                        key={entry.id}
-                        entry={entry}
-                        onDismiss={() => void window.noted.ocr.dismiss(entry.id)}
-                      />
-                    ))}
-
                   {courses.map((course) => (
                     <CourseCard
                       key={course.id}
@@ -241,17 +194,6 @@ export default function SubjectPage({
           )
         })}
       </div>
-
-      {proposal && (
-        <PhotoOrderDialog
-          proposal={proposal}
-          onCancel={() => setProposal(null)}
-          onConfirm={() => {
-            void window.noted.ocr.importPhotos(proposal)
-            setProposal(null)
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -317,14 +259,14 @@ function Sheet({
   format,
   preview
 }: {
-  format: CourseFormat | 'pending'
+  format: CourseFormat
   preview: Preview | null
 }): React.JSX.Element {
   return (
     <span className="matter-sheet">
       {preview ? <img src={preview.url} alt="" /> : <span className="matter-sheet-blank" />}
       <span className="matter-format" data-format={format}>
-        {format === 'pending' ? 'OCR' : formatLabel(format)}
+        {formatLabel(format)}
       </span>
     </span>
   )
@@ -336,40 +278,6 @@ function sizeLabel(preview: Preview | null): string | null {
   if (preview.pages !== undefined) return preview.pages === 1 ? '1 p.' : `${preview.pages} p.`
   if (preview.words !== undefined) return `${Math.max(1, Math.round(preview.words / 200))} min`
   return null
-}
-
-/**
- * Un cours en train d'etre lu a partir d'images.
- *
- * Il tient sa place dans la mosaique — c'en est un qui arrive — mais il ne
- * s'ouvre pas : il n'existe pas encore comme fichier. La carte disparait
- * d'elle-meme quand le cours devient reel, ou porte la raison de son echec.
- */
-function PendingCard({
-  entry,
-  onDismiss
-}: {
-  entry: PendingConversion
-  onDismiss: () => void
-}): React.JSX.Element {
-  const failed = Boolean(entry.failed)
-
-  return (
-    <div className="matter-doc matter-doc--pending">
-      <Sheet format="pending" preview={null} />
-      <h3 className="matter-doc-title">{entry.title}</h3>
-      <div className="matter-doc-meta">
-        <span className={`matter-doc-progress${failed ? ' matter-doc-progress--failed' : ''}`}>
-          {failed ? entry.failed : `lecture — ${entry.done} sur ${entry.total}`}
-        </span>
-        {failed && (
-          <button className="glass-button glass-button--quiet matter-doc-dismiss" onClick={onDismiss}>
-            Retirer
-          </button>
-        )}
-      </div>
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------------------

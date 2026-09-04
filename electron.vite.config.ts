@@ -8,18 +8,17 @@ import type { Plugin } from 'vite'
 const shared = resolve('src/shared')
 
 /**
- * Deux calculs tournent dans de vrais processus Node, lances par le processus
- * principal : les vecteurs de sens et la detection de mise en page. Tous deux
- * pour la meme raison, verifiee — sous Electron, l'inference ONNX ne rend
- * jamais la main. Leurs scripts doivent donc rester des fichiers a part sur le
- * disque, a cote du bundle, et non etre inlines dedans.
+ * Le calcul des vecteurs de sens tourne dans un vrai processus Node, lance par
+ * le processus principal, pour une raison verifiee — sous Electron, l'inference
+ * ONNX ne rend jamais la main. Son script doit donc rester un fichier a part
+ * sur le disque, a cote du bundle, et non etre inline dedans.
  */
 function copyWorkers(): Plugin {
   return {
     name: 'noted-copy-workers',
     closeBundle() {
       mkdirSync(resolve('out/main'), { recursive: true })
-      for (const from of ['src/main/rag/embed-worker.cjs', 'src/main/ocr/layout-worker.cjs']) {
+      for (const from of ['src/main/rag/embed-worker.cjs']) {
         copyFileSync(resolve(from), resolve('out/main', from.split('/').pop() as string))
       }
     }

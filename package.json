@@ -34,7 +34,6 @@
     "asarUnpack": [
       "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
       "out/main/embed-worker.cjs",
-      "out/main/layout-worker.cjs",
       "node_modules/@huggingface/**/*",
       "node_modules/onnxruntime-node/**/*",
       "node_modules/onnxruntime-common/**/*",

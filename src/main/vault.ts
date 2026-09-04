@@ -52,7 +52,6 @@ export function vaultPaths(): VaultPaths {
     annotations: path.join(VAULT_ROOT, 'Annotations'),
     flashcards: path.join(VAULT_ROOT, 'Flashcards'),
     prompts: path.join(VAULT_ROOT, 'Prompts'),
-    originals: path.join(VAULT_ROOT, 'Originaux'),
     drafts: path.join(VAULT_ROOT, 'Brouillons'),
     internal: path.join(VAULT_ROOT, '.noted')
   }
@@ -75,8 +74,6 @@ le versionner, ou le lire dans n'importe quel éditeur.
     Brouillons/   ce que l'assistant écrit avant que cela n'entre dans tes
                   notes, avec la page ou la section dont chaque passage parle ;
                   vidé dès que le passage est posé
-    Originaux/    les documents scannés et les photos que Noted a reconstitués
-                  en texte — l'original n'est jamais supprimé
     .noted/       cache technique de l'application — sans intérêt à la lecture
 
 Pour ajouter un cours : dépose le fichier dans Cours/<Matière>/, ou utilise

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { PhotoProposal, Subject } from '@shared/types'
+import type { Subject } from '@shared/types'
 import { readableError } from '../lib/errors'
-import { PhotoOrderDialog } from './PhotoOrder'
 import '../styles/drop.css'
 
 interface DropZoneProps {
@@ -22,11 +21,6 @@ export default function DropZone({ subjects, onImported }: DropZoneProps): React
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  /**
-   * L'ordre propose pour des images qu'on vient de lacher. Elles ne sont pas
-   * des cours : elles doivent etre lues, et leur ordre confirme avant.
-   */
-  const [proposal, setProposal] = useState<PhotoProposal | null>(null)
   /** Matiere actuellement survolee. On doit savoir ou l'on lache avant de lacher. */
   const [hovered, setHovered] = useState<string | null>(null)
 
@@ -95,17 +89,12 @@ export default function DropZone({ subjects, onImported }: DropZoneProps): React
       setBusy(subject)
       setError(null)
       try {
-        const { imported, photos } = await window.noted.vault.importPaths(paths, subject)
-        if (imported.length === 0 && !photos) {
-          setError(
-            'Aucun de ces fichiers n’est un cours (PDF, Word, PowerPoint, Markdown, HTML, ou des images).'
-          )
+        const { imported } = await window.noted.vault.importPaths(paths, subject)
+        if (imported.length === 0) {
+          setError('Aucun de ces fichiers n’est un cours (PDF, Word, PowerPoint, Markdown, HTML).')
           return
         }
-        // Les images passent par un accord : c'est leur ordre de lecture qui se
-        // joue, et il vaut mieux le voir maintenant qu'apres trente pages.
-        if (photos) setProposal(photos)
-        if (imported.length > 0) onImported(imported)
+        onImported(imported)
       } catch (cause) {
         setError(readableError(cause, "L'import a échoué."))
       } finally {
@@ -122,19 +111,6 @@ export default function DropZone({ subjects, onImported }: DropZoneProps): React
     const timer = setTimeout(() => setError(null), 5000)
     return () => clearTimeout(timer)
   }, [error])
-
-  if (proposal) {
-    return (
-      <PhotoOrderDialog
-        proposal={proposal}
-        onCancel={() => setProposal(null)}
-        onConfirm={() => {
-          void window.noted.ocr.importPhotos(proposal)
-          setProposal(null)
-        }}
-      />
-    )
-  }
 
   if (!dragging && !error) return null
 
@@ -181,8 +157,7 @@ export default function DropZone({ subjects, onImported }: DropZoneProps): React
           )}
 
           <p className="drop-hint">
-            PDF, Word, PowerPoint, Markdown, HTML — ou des images, qui deviendront un seul cours.
-            Lâche à côté pour annuler.
+            PDF, Word, PowerPoint, Markdown, HTML. Lâche à côté pour annuler.
           </p>
         </div>
       )}

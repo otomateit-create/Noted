@@ -113,12 +113,12 @@ async function pruneEmptyFolders(courseId: string): Promise<void> {
  * Fait suivre tout ce qui vit ailleurs mais porte l'identifiant du cours : sa
  * note, ses surlignages, ses vecteurs, sa place dans l'index et sa conversation.
  *
- * Separe du deplacement du document parce que les deux ne vont pas toujours
- * ensemble. Une conversion par OCR n'a pas de document a deplacer — elle en
- * ecrit un nouveau, sous une autre extension, et l'ancien part aux archives. Ce
- * qui doit suivre l'identifiant, en revanche, est exactement le meme.
+ * Separe du deplacement du document, qui l'appelle une fois le fichier arrive
+ * a destination : c'est la seule etape qui peut echouer pour une raison qui
+ * interesse l'utilisateur, et rien de ce qui suit ne doit laisser le cours a
+ * moitie deplace.
  */
-export async function moveCourseAnnexes(courseId: string, nextId: string): Promise<void> {
+async function moveCourseAnnexes(courseId: string, nextId: string): Promise<void> {
   if (nextId === courseId) return
 
   // La note ne suit que si elle existe : un cours simplement ouvert n'en a pas
@@ -143,8 +143,6 @@ export async function moveCourseAnnexes(courseId: string, nextId: string): Promi
   renameSession(courseId, nextId)
 
   // En dernier, quand tout a bouge : ce qui reste vide n'attend plus personne.
-  // Sans effet quand le document n'a pas suivi — une conversion par OCR laisse
-  // l'ancien dossier occupe, et `rmdir` ne fait rien d'un dossier plein.
   await pruneEmptyFolders(courseId)
 }
 

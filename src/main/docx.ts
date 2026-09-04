@@ -119,12 +119,8 @@ export function readDocx(courseId: string): Promise<DocxDocument> {
   return convertDocxFile(resolveCoursePath(courseId))
 }
 
-/**
- * Convertit un fichier Word en HTML, ou qu'il vive. Le chemin doit avoir ete
- * verifie par l'appelant : ici pour un cours, `originalPath` pour un original
- * archive que l'onglet « Original » veut montrer.
- */
-export async function convertDocxFile(filePath: string): Promise<DocxDocument> {
+/** Convertit un fichier Word en HTML. Le chemin est celui du cours, deja resolu. */
+async function convertDocxFile(filePath: string): Promise<DocxDocument> {
   const result = await mammoth.convertToHtml(
     { path: filePath },
     {

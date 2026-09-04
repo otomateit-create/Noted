@@ -23,7 +23,7 @@
  */
 
 import { CONTEXT, readable } from '../../shared/passage'
-import type { ExtractedCourse, FigureReading } from '../../shared/types'
+import type { ExtractedCourse } from '../../shared/types'
 import { contextLine, hardSplit, pagesText, splitByHeading } from './chunk'
 
 export interface FineChunk {
@@ -51,13 +51,6 @@ export interface FineChunk {
   after: string
   /** Meme role que Chunk.context : l'emplacement `title:` d'EmbeddingGemma. */
   context: string
-  /**
-   * Le rang de la figure d'ou ce passage est tire, ou null s'il vient du texte.
-   *
-   * Toujours null pour un document pagine : les figures d'un PDF sont peintes
-   * dans la page, il n'y a pas d'element a designer.
-   */
-  figure: number | null
 }
 
 /**
@@ -75,11 +68,11 @@ const SENTENCES = 4
  * Plafond d'une phrase, en caracteres.
  *
  * `Intl.Segmenter` ne coupe que sur une ponctuation suivie d'une majuscule. Un
- * tableau aplati, une enumeration sortie d'un OCR, une page de titres sans
- * points : rien de tout cela n'en contient, et le segmenteur rend alors la page
- * entiere comme une seule « phrase ». Quatre de ces phrases-la feraient un
- * passage de plusieurs milliers de caracteres, c'est-a-dire exactement ce que
- * ce decoupage existe pour eviter.
+ * tableau aplati, une enumeration, une page de titres sans points : rien de
+ * tout cela n'en contient, et le segmenteur rend alors la page entiere comme
+ * une seule « phrase ». Quatre de ces phrases-la feraient un passage de
+ * plusieurs milliers de caracteres, c'est-a-dire exactement ce que ce
+ * decoupage existe pour eviter.
  */
 const MAX_SIZE_FINE = 700
 
@@ -134,8 +127,7 @@ function chunkPagesFine(extracted: ExtractedCourse): FineChunk[] {
         sectionIndex: null,
         heading: page.section,
         ...around(source, span),
-        context,
-        figure: null
+        context
       })
     })
   }
@@ -223,136 +215,8 @@ function withoutInlineMarks(text: string): string {
   )
 }
 
-/** Un morceau de section homogene : du texte ecrit, ou une image entiere. */
-interface Region {
-  text: string
-  /** Le rang de l'image, ou null quand la region est du texte. */
-  figure: number | null
-}
-
-/**
- * Ce que les images ont dit, mis dans la forme exacte du texte affiche.
- *
- * Le meme nettoyage, ligne par ligne, que celui applique a la section : ces
- * chaines sont donc, caractere pour caractere, des morceaux de ce que
- * `displayed` vient de produire — et c'est ce qui permet de les y retrouver
- * d'un simple `indexOf`, sans avoir a suivre des positions a travers un texte
- * qu'on redecoupe et renettoie.
- */
-function figureTexts(figures: FigureReading[] | undefined): Region[] {
-  if (!figures || figures.length === 0) return []
-
-  return figures
-    .map((figure) => ({ figure: figure.at, text: displayed(figure.text.split('\n'), false) }))
-    .filter((region) => region.text !== '')
-}
-
-/**
- * Le Markdown du cours, les titres lus dans les images neutralises.
- *
- * Le moteur d'OCR rend ce qu'il lit en Markdown : un schema dont le dessin
- * porte un intitule ressort avec un « ## » devant, et ce texte est verse dans
- * le cours a la place du marqueur. `splitByHeading` y voit alors un titre et
- * coupe la section en deux — en plein milieu de l'image. La figure ne se
- * retrouve plus d'un seul tenant nulle part, donc plus rien a encadrer : cinq
- * des vingt et une captures d'un Word de test etaient dans ce cas.
- *
- * Et le mal est plus profond que l'encadre. `unitKey` numerote les sections
- * dans l'ordre, et cet ordinal est confronte a ce que la fenetre compte de
- * `<h1>`-`<h6>` a l'ecran. Or ce titre-la n'est pas a l'ecran : il est dessine
- * dans une image. Chaque intitule de schema decalait donc d'un cran toutes les
- * sections suivantes, et le filtre « la note vient de ce qu'on a sous les
- * yeux » designait la section d'a cote.
- *
- * Neutraliser plutot que retirer : le texte du schema reste, le diese cede la
- * place a une espace — exactement ce que `displayed` en aurait fait, si bien
- * que pas un passage ne change de contenu.
- *
- * Le decoupage large, lui, garde ces titres : ce sont eux qu'il donne a citer a
- * l'assistant, et un intitule lu dans un schema dit bien de quoi le schema
- * parle. La contrepartie est connue et se lit dans `unitKeysForAnchors` : une
- * citation qui nomme un titre de ce genre ne se traduit en aucune unite, et
- * l'ancrage cherche alors dans tout le cours au lieu de la section visible.
- */
-function withoutFigureHeadings(markdown: string, figures: FigureReading[] | undefined): string {
-  if (!figures || figures.length === 0) return markdown
-
-  let out = ''
-  let cursor = 0
-
-  // Les lectures ont ete versees dans cet ordre, et mot pour mot : on les
-  // retrouve donc a la suite, sans avoir a chercher en arriere.
-  for (const figure of figures) {
-    const at = markdown.indexOf(figure.text, cursor)
-    if (at < 0) continue
-
-    // Une espace a la place du diese, et non rien : `withoutBlockMarks` en pose
-    // une, et les deux textes doivent se correspondre au caractere pres pour
-    // que la figure se retrouve dans sa section.
-    out += markdown.slice(cursor, at) + figure.text.replace(/^ {0,3}#{1,6}[ \t]+/gm, ' ')
-    cursor = at + figure.text.length
-  }
-
-  return out + markdown.slice(cursor)
-}
-
-/**
- * Une section coupee aux frontieres de ses images.
- *
- * Sans cette coupe, un passage enjambe la frontiere : le texte d'un schema n'a
- * pas de ponctuation, le segmenteur en fait une seule immense « phrase », et le
- * groupe de quatre deborde sur le paragraphe d'a cote. Le passage ne serait
- * alors ni du texte — introuvable dans le document — ni une image — il en dit
- * plus qu'elle. Mesure sur un Word de vingt et une captures : la moitie des
- * passages nes d'une image debordaient ainsi, et aucun n'etait encadrable.
- *
- * **L'ordre vient des positions, jamais de la liste.** C'est la tout le soin de
- * cette fonction. Les figures arrivent dans l'ordre du document, et suivre cet
- * ordre avec un curseur qui avance semblait donc naturel — mais deux schemas
- * d'un meme cours se ressemblent, et le texte de l'un se retrouve parfois mot
- * pour mot dans l'autre. Il suffit alors qu'une figure du debut se reconnaisse
- * dans une figure de la fin pour que le curseur saute par-dessus tout ce qui
- * les separe : cinq figures consecutives perdues d'un coup, sur le Word de
- * test. On cherche donc chacune pour elle-meme, et c'est la position trouvee
- * qui remet tout le monde dans l'ordre.
- *
- * Ce qui se recouvre est ecarte, le premier arrive gardant sa place, et le plus
- * long l'emporte a position egale : c'est celui-la qui dit ou l'image finit.
- * Une meme image posee deux fois dans la meme section n'est reconnue qu'une
- * fois — la seconde reste du texte, donc un passage qu'on ne saura pas montrer,
- * jamais un passage montre de travers.
- */
-function splitByFigure(source: string, figures: Region[]): Region[] {
-  const marks: { at: number; region: Region }[] = []
-
-  for (const figure of figures) {
-    const at = source.indexOf(figure.text)
-    if (at >= 0) marks.push({ at, region: figure })
-  }
-
-  if (marks.length === 0) return [{ text: source, figure: null }]
-
-  marks.sort((a, b) => a.at - b.at || b.region.text.length - a.region.text.length)
-
-  const regions: Region[] = []
-  let cursor = 0
-
-  for (const mark of marks) {
-    if (mark.at < cursor) continue
-
-    if (mark.at > cursor) regions.push({ text: source.slice(cursor, mark.at), figure: null })
-    regions.push(mark.region)
-    cursor = mark.at + mark.region.text.length
-  }
-
-  if (cursor < source.length) regions.push({ text: source.slice(cursor), figure: null })
-
-  return regions
-}
-
 function chunkSectionsFine(extracted: ExtractedCourse): FineChunk[] {
   const chunks: FineChunk[] = []
-  const figures = figureTexts(extracted.figures)
 
   /**
    * L'ordinal se compte sur les titres rencontres, et surtout pas sur l'index
@@ -364,9 +228,7 @@ function chunkSectionsFine(extracted: ExtractedCourse): FineChunk[] {
    */
   let sectionIndex = 0
 
-  const markdown = withoutFigureHeadings(extracted.markdown, extracted.figures)
-
-  for (const section of splitByHeading(markdown)) {
+  for (const section of splitByHeading(extracted.markdown)) {
     if (section.heading) sectionIndex += 1
 
     const source = displayed(section.lines, Boolean(section.heading))
@@ -377,26 +239,18 @@ function chunkSectionsFine(extracted: ExtractedCourse): FineChunk[] {
     const anchor = section.path.length > 0 ? section.path.join(' › ') : 'Introduction'
     const context = contextLine(extracted.courseId, null, anchor)
 
-    // Le rang court sur toute la section, regions confondues : c'est lui qui
-    // fait l'identite d'un passage, et deux passages de la meme section ne
-    // peuvent pas la partager.
-    let rank = 0
-
-    for (const region of splitByFigure(source, figures)) {
-      for (const span of passages(region.text)) {
-        chunks.push({
-          id: `s${sectionIndex}#${rank++}`,
-          unitKey: `section:${sectionIndex}`,
-          anchor,
-          page: null,
-          sectionIndex,
-          heading: section.heading,
-          ...around(region.text, span),
-          context,
-          figure: region.figure
-        })
-      }
-    }
+    passages(source).forEach((span, index) => {
+      chunks.push({
+        id: `s${sectionIndex}#${index}`,
+        unitKey: `section:${sectionIndex}`,
+        anchor,
+        page: null,
+        sectionIndex,
+        heading: section.heading,
+        ...around(source, span),
+        context
+      })
+    })
   }
 
   return chunks

@@ -5,6 +5,7 @@
  *     ~/Documents/Noted/Prompts/tuteur.md
  *     ~/Documents/Noted/Prompts/generateur.md
  *     ~/Documents/Noted/Prompts/memoire.md
+ *     ~/Documents/Noted/Prompts/descripteur.md
  *
  * Le dernier n'est pas un prompt systeme : c'est la methode que l'assistant
  * relit tous les huit echanges, quand l'application lui demande de tenir sa
@@ -28,6 +29,7 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import assistantGraine from './graines/assistant.md?raw'
+import descripteurGraine from './graines/descripteur.md?raw'
 import generateurGraine from './graines/generateur.md?raw'
 import memoireGraine from './graines/memoire.md?raw'
 import tuteurGraine from './graines/tuteur.md?raw'
@@ -41,14 +43,21 @@ import {
 import type { PromptId } from '../../shared/types'
 import { vaultPaths } from '../vault'
 
-export const PROMPT_IDS: readonly PromptId[] = ['assistant', 'tuteur', 'generateur', 'memoire']
+export const PROMPT_IDS: readonly PromptId[] = [
+  'assistant',
+  'tuteur',
+  'generateur',
+  'memoire',
+  'descripteur'
+]
 
 /** Les textes livres avec l'application, inlines a la construction. */
 const GRAINES: Record<PromptId, string> = {
   assistant: assistantGraine,
   tuteur: tuteurGraine,
   generateur: generateurGraine,
-  memoire: memoireGraine
+  memoire: memoireGraine,
+  descripteur: descripteurGraine
 }
 
 /** Le fichier d'un agent dans le vault. */

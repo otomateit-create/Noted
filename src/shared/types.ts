@@ -212,22 +212,6 @@ export interface NoteAnchor {
   progress: number | null
   /** Le passage vise, quand l'ancrage a ete pose a la main. */
   passage: Passage | null
-  /**
-   * Le rang de la figure d'ou vient le passage, ou null s'il vient du texte.
-   *
-   * Un document illustre porte deux sortes de contenu : ce qui s'ecrit, et ce
-   * que les images disent. La lecture des captures (`ocr/figures.ts`) verse le
-   * second dans l'index, a la place exacte du marqueur — c'est ce qui permet a
-   * l'assistant de citer un tableau colle en capture. Mais ce texte-la n'est
-   * nulle part a l'ecran : l'image y est restee une image. Un passage qui en
-   * vient ne peut donc pas etre retrouve dans le document affiche, et c'est ce
-   * rang qui dit alors quoi encadrer — la n-ieme image du document, dans
-   * l'ordre ou elle apparait.
-   *
-   * Toujours null pour un PDF : ses figures sont peintes dans la page, il n'y a
-   * pas d'element a designer, et l'ancre y ramene deja par son numero de page.
-   */
-  figure: number | null
 }
 
 /**
@@ -265,12 +249,18 @@ export function anchorMarker(anchor: NoteAnchor): string {
     body.b = anchor.passage.before
     body.a = anchor.passage.after
   }
-  if (anchor.figure !== null) body.f = anchor.figure
 
   return `<!-- ancre ${JSON.stringify(body)} -->`
 }
 
-/** Relit un marqueur. Rend null sur tout ce qu'on ne sait pas relire. */
+/**
+ * Relit un marqueur. Rend null sur tout ce qu'on ne sait pas relire.
+ *
+ * Champ par champ, et jamais en bloc : les notes deja ecrites sur le disque
+ * portent des clefs que le format ne connait plus — `f`, le rang d'une image —
+ * et une ancre qui en contient doit continuer de se relire, la clef inconnue
+ * simplement ignoree.
+ */
 export function parseAnchorMarker(body: string): NoteAnchor | null {
   let raw: Record<string, unknown>
 
@@ -294,10 +284,7 @@ export function parseAnchorMarker(body: string): NoteAnchor | null {
           before: typeof raw.b === 'string' ? raw.b : '',
           after: typeof raw.a === 'string' ? raw.a : ''
         }
-      : null,
-    // Une figure sans passage ne designe rien : c'est le texte de l'image qui
-    // fait l'ancre, le rang ne fait que dire ou le montrer.
-    figure: text && typeof raw.f === 'number' ? raw.f : null
+      : null
   }
 
   // Une ancre qui ne designe rien n'est pas une ancre.
@@ -421,13 +408,17 @@ export type CourseAnchor = 'page' | 'section'
  *
  * **A incrementer des que la lecture d'un document change** — le regroupement
  * des fragments en lignes, le seuil de paragraphe, la detection des en-tetes
- * courants ou des sommaires, l'extraction des figures. Le texte extrait est
+ * courants ou des sommaires, le reperage des images. Le texte extrait est
  * garde sur le disque d'une ouverture a l'autre, et c'est ce nombre qui dit au
  * cache que ce qu'il conserve a ete produit par une version depassee. L'oublier
  * ne casse rien de visible : cela laisse simplement tous les cours deja lus sur
  * leur ancien texte, indefiniment.
+ *
+ * Passee a 2 au retrait de la lecture d'images : le texte extrait ne contient
+ * plus ce que les captures disaient, les marqueurs `[figure]` restent tels
+ * quels, et un cache ecrit avant ce retrait decrirait un autre document.
  */
-export const EXTRACTION_VERSION = 1
+export const EXTRACTION_VERSION = 2
 
 /** Contenu d'un cours extrait en texte, pret pour le contexte de l'IA. */
 export interface ExtractedCourse {
@@ -447,33 +438,12 @@ export interface ExtractedCourse {
    * Les images du document posees sur le disque, dans l'ordre d'apparition.
    *
    * Le n-ieme `[figure]` du texte correspond au n-ieme nom de cette liste. C'est
-   * par elle que la lecture des captures d'ecran retrouve sa place : sans elle,
-   * le texte tire d'une image serait ajoute quelque part, pas exactement la ou
-   * l'image se trouvait — et l'ancre de la citation designerait le mauvais
-   * endroit du cours.
+   * par elle que la description des images — faite apres la vectorisation —
+   * retrouve sa place : sans elle, ce qu'une image dit serait rattache quelque
+   * part, pas exactement la ou l'image se trouvait, et l'ancre de la citation
+   * designerait le mauvais endroit du cours.
    */
   media?: string[]
-  /**
-   * Ce que les images du document ont dit, une fois lues.
-   *
-   * Rempli par `readFigures`, et par lui seul : le texte de chaque capture y
-   * figure exactement comme il vient d'etre verse dans `pages` et `markdown`.
-   * C'est ce qui permet au decoupage fin de reconnaitre un passage venu d'une
-   * image sans avoir a suivre des positions a travers un texte qu'il redecoupe
-   * et renettoie.
-   *
-   * Absent tant qu'aucune image n'a ete lue — moteur absent, images
-   * decoratives, lecture infructueuse.
-   */
-  figures?: FigureReading[]
-}
-
-/** Ce qu'une image du document dit, et de quelle image il s'agit. */
-export interface FigureReading {
-  /** Rang de l'image dans `media`, donc dans le document affiche. */
-  at: number
-  /** Le texte verse a la place du marqueur, tel quel. */
-  text: string
 }
 
 /**
@@ -523,10 +493,12 @@ export interface ExtractedPage {
  * `attente` et `calcul` couvrent le decoupage large — celui dont depend chaque
  * reponse de l'assistant. `affine` est le second round, plus fin, qui ne sert
  * qu'a poser les notes au bon paragraphe et qui ne demarre qu'une fois le
- * premier entierement ecrit sur le disque. `complet` dit que les deux sont
- * faits, et rien de moins.
+ * premier entierement ecrit sur le disque. `images` vient apres les deux, sur
+ * les seuls documents illustres : les figures partent se faire decrire, et la
+ * recherche fonctionne deja pendant ce temps. `complet` dit que tout est fait,
+ * et rien de moins.
  */
-export type VectorPhase = 'attente' | 'calcul' | 'affine' | 'complet' | 'echec'
+export type VectorPhase = 'attente' | 'calcul' | 'affine' | 'images' | 'complet' | 'echec'
 
 export interface VectorStatus {
   courseId: string
@@ -545,301 +517,17 @@ export interface VectorStatus {
   reason?: string
 }
 
-// ---------------------------------------------------------------------------
-// Lecture par OCR
-// ---------------------------------------------------------------------------
-
 /**
- * Ou en est l'installation du moteur de lecture d'images.
- *
- * Le moteur pese 1,4 Go et arrive par une connexion qui n'est pas toujours
- * bonne. Ce n'est donc pas une case a cocher mais un etat qui dure, parfois des
- * heures, et que l'interface doit savoir raconter honnetement — d'ou le debit et
- * le temps restant, plutot qu'un tourniquet qui ne dit rien.
- */
-export type OcrModelPhase = 'absent' | 'telechargement' | 'pret' | 'echec'
-
-export interface OcrModelStatus {
-  phase: OcrModelPhase
-  /** Octets deja sur le disque, tous fichiers confondus. */
-  received: number
-  /** Octets attendus au total. Vaut 0 tant qu'on ne les connait pas. */
-  total: number
-  /** Debit recent, en octets par seconde. Zero a l'arret. */
-  speed: number
-  /** Secondes restantes, ou null tant que le debit ne permet pas de le dire. */
-  eta: number | null
-  /** Ce qui manque ou ce qui a echoue, en clair. */
-  reason?: string
-}
-
-/**
- * Nombre total de pixels qu'une image envoyee au moteur de lecture ne doit pas
- * depasser.
- *
- * **En surface, et non en cote le plus long** — la nuance a coute une enquete.
- * La premiere calibration plafonnait le grand cote a 1280, mesure par dichotomie
- * sur une page de cours en portrait : 905×1280 passait, 996×1408 non. Mais une
- * capture d'ecran est large, pas haute : 1280×1190 respecte ce plafond tout en
- * faisant une fois et demie la surface de la page qui avait servi a l'etablir —
- * et l'encodeur visuel y epuisait a nouveau la memoire graphique
- * (`kIOGPUCommandBufferCallbackErrorOutOfMemory`). Le moteur rendait alors un
- * bloc vide, sans erreur, et les captures d'ecran restaient muettes.
- *
- * Ce qui compte est donc la surface : 905×1280 fait 1,16 Mpx et passe,
- * 996×1408 fait 1,40 Mpx et echoue. Verifie ensuite sur la capture fautive,
- * ramenee a 1111×1034 : plus d'erreur, et du texte enfin lu.
- *
- * On ne descend pas plus bas pour se rassurer : a surface trop reduite, le
- * modele rendait `\ell` la ou il fallait lire `t` en indice d'une somme. La
- * marge entre « illisible » et « faux » est mince.
- *
- * Vit ici parce que les deux fabricants d'images doivent s'y tenir : le
- * renderer, qui dessine les pages de PDF, et `ocr/photos.ts`, qui prepare les
- * photos et les captures.
- */
-export const OCR_MAX_IMAGE_PIXELS = 1_100_000
-
-/**
- * Surface totale accordee a une page une fois decoupee en regions.
- *
- * **C'est un budget de temps, et non de memoire** — la distinction a longtemps
- * manque ici, et elle est ce qui autorise le chiffre ci-dessous. Les regions
- * partent au moteur une par une, dans une file strictement serialisee
- * (`ocr/engine.ts`) : le pic de memoire graphique est donc fixe par la plus
- * grande image seule, jamais par leur somme. Ce que borne ce budget, c'est le
- * travail total demande pour une page — donc la chauffe et la duree. La
- * contrainte de memoire, elle, est ailleurs et ne bouge pas :
- * `OCR_MAX_IMAGE_PIXELS`, qu'aucune region ne depasse jamais.
- *
- * Quatre millions, et non deux : c'est la surface d'une A4 rendue a 200 points
- * par pouce, la resolution pour laquelle GLM-OCR est calibre (`pdf_dpi: 200`
- * dans la configuration de reference). Au budget precedent, la meme page etait
- * ramenee a 151 points par pouce juste apres avoir ete dessinee — le gain de
- * resolution etait repris d'une main a la page ce qu'on venait de donner de
- * l'autre au rendu.
- */
-export const OCR_PAGE_PIXEL_BUDGET = 4_000_000
-
-/**
- * Resolution a laquelle une page de document est dessinee avant d'etre lue.
- *
- * Deux cents points par pouce : c'est la valeur de la chaine officielle
- * (`glmocr/config.yaml`, `pdf_dpi: 200`), et le modele est entraine sur des
- * pages a cette echelle. Le rendu partait auparavant a soixante-douze — la
- * taille en points du PDF, prise telle quelle faute d'agrandissement — ou un
- * caractere de corps ne fait qu'une dizaine de pixels de haut et ou les traits
- * fins passent sous le pixel. C'etait la premiere cause de texte manquant.
- */
-export const OCR_PAGE_DPI = 200
-
-/**
- * Cote le plus long d'une page dessinee, en pixels.
- *
- * Meme plafond que la chaine de reference (`max_width_or_height=3500`). Il ne
- * sert que pour les formats extremes — une page panoramique, un plan — ou la
- * seule surface laisserait passer une image demesuree dans un sens.
- */
-export const OCR_PAGE_MAX_SIDE = 3500
-
-/**
- * Les dimensions a donner a une **page** avant de la decouper en regions.
- *
- * A ne pas confondre avec `fitToOcrBudget`, qui prepare une image destinee au
- * modele. Celle-ci n'est jamais envoyee telle quelle : elle sert de source aux
- * decoupes, et l'ecraser d'avance rendrait tout l'etage de mise en page inutile
- * — on decouperait dans une image deja perdue. Le plafond ne sert donc qu'a
- * borner la memoire, pas la qualite.
- */
-export function fitToPageBudget(
-  width: number,
-  height: number
-): { width: number; height: number } {
-  const pixels = width * height
-  if (pixels <= 0) return { width, height }
-
-  // Deux plafonds, et le plus contraignant l'emporte : la surface, qui borne le
-  // travail demande, et le cote le plus long, qui rattrape les formats extremes
-  // qu'une surface seule laisserait passer.
-  const byArea = pixels > OCR_PAGE_PIXEL_BUDGET ? Math.sqrt(OCR_PAGE_PIXEL_BUDGET / pixels) : 1
-  const longest = Math.max(width, height)
-  const bySide = longest > OCR_PAGE_MAX_SIDE ? OCR_PAGE_MAX_SIDE / longest : 1
-
-  const scale = Math.min(byArea, bySide)
-  if (scale >= 1) return { width, height }
-
-  return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale))
-  }
-}
-
-/**
- * Les dimensions a donner a une image pour qu'elle tienne dans ce budget, en
- * conservant ses proportions. Une image deja assez petite n'est pas agrandie.
- */
-export function fitToOcrBudget(
-  width: number,
-  height: number
-): { width: number; height: number } {
-  const pixels = width * height
-  if (pixels <= 0 || pixels <= OCR_MAX_IMAGE_PIXELS) return { width, height }
-
-  // On tronque, on n'arrondit pas. La nuance vaut ici ce qu'elle ne vaut nulle
-  // part ailleurs : ce plafond est une contrainte de memoire graphique, et deux
-  // arrondis vers le haut suffisent a le franchir. Une A4 ramenee au budget
-  // sortait en 882 × 1248, soit 1 100 736 pixels pour un plafond de 1 100 000 —
-  // sans consequence a ce niveau, mais un plafond qu'on depasse n'en est plus
-  // un, et rien n'avertit quand celui-la cede.
-  const scale = Math.sqrt(OCR_MAX_IMAGE_PIXELS / pixels)
-  return {
-    width: Math.max(1, Math.floor(width * scale)),
-    height: Math.max(1, Math.floor(height * scale))
-  }
-}
-
-/**
- * Ce qu'a rendu la lecture d'une image.
- *
- * Une seule valeur, et c'est deliberé. Il y avait ici une confiance destinee a
- * une pastille de qualite ; le seul chemin qui fonctionne dans llama.cpp ne rend
- * pas les nombres qui l'auraient rendue honnete, et une mesure de complaisance
- * aurait invite a se fier a une lecture jamais mesuree. Ce qui restait —
- * detecter une page ou le modele a visiblement perdu pied — est devenu une
- * decision du moteur plutot qu'un affichage : une page qui boucle n'est pas
- * rendue du tout.
- */
-export interface OcrRead {
-  /** Markdown rendu par le modele. */
-  markdown: string
-}
-
-/**
- * Ce qu'on sait d'un cours issu d'une lecture par OCR.
- *
- * Ces informations vivent dans le document lui-meme, en tete, sous forme de
- * commentaire — comme l'habillage des tableaux et les ancres des notes. Elles
- * pourraient tenir dans `.noted/`, mais elles n'y seraient qu'a moitie chez
- * elles : le lien vers l'original n'est pas du cache, et un cours qui perd la
- * trace de sa source ne sait plus proposer l'onglet qui la montre.
- */
-export interface OcrDocument {
-  /** Identite du modele qui a lu ce document, quantisation comprise. */
-  model: string
-  /** Chemin de l'original, relatif a `Originaux/`. */
-  original: string
-  /**
-   * Pages de l'original dont la lecture a echoue, quand il y en a. Le cours
-   * est utilisable sans elles, mais il est incomplet, et c'est ce champ qui
-   * permet de le dire a l'ecran et de proposer de poursuivre la lecture.
-   */
-  missing?: number[]
-  /** Nombre de pages de l'original, quand des pages manquent. */
-  pageCount?: number
-}
-
-/** « <!-- noted-ocr {"model":"…"} --> », seul sur sa ligne, en tete du document. */
-export const OCR_MARKER = /^<!--\s*noted-ocr\s+(\{.*\})\s*-->$/
-
-export function ocrMarker(document: OcrDocument): string {
-  return `<!-- noted-ocr ${JSON.stringify(document)} -->`
-}
-
-export function parseOcrMarker(body: string): OcrDocument | null {
-  try {
-    const raw = JSON.parse(body) as Partial<OcrDocument>
-    if (typeof raw.model !== 'string' || typeof raw.original !== 'string') return null
-
-    const document: OcrDocument = { model: raw.model, original: raw.original }
-
-    // Les pages manquantes ne sont reprises que si elles ont la forme promise :
-    // un en-tete abime ne doit pas faire echouer la lecture du cours entier.
-    if (
-      Array.isArray(raw.missing) &&
-      raw.missing.length > 0 &&
-      raw.missing.every((page) => typeof page === 'number' && Number.isInteger(page) && page > 0)
-    ) {
-      document.missing = raw.missing
-      if (typeof raw.pageCount === 'number' && Number.isInteger(raw.pageCount)) {
-        document.pageCount = raw.pageCount
-      }
-    }
-
-    return document
-  } catch {
-    return null
-  }
-}
-
-/**
- * « <!-- page 13 --> », seul sur sa ligne.
- *
- * C'est ce repere qui rend au Markdown ce que la conversion lui avait pris. Un
- * document lu page par page sait ou chaque page commence : l'inscrire coute un
- * commentaire invisible, et cela permet aux citations de continuer a dire
- * « p. 13 » plutot que de se rabattre sur les titres, a la bascule entre
- * l'original et la version lue de rester au meme endroit, et a la pastille de
- * qualite de designer la page fautive plutot que le document entier.
- */
-export const PAGE_MARKER = /^<!--\s*page\s+(\d+)\s*-->$/
-
-export function pageMarker(page: number): string {
-  return `<!-- page ${page} -->`
-}
-
-/**
- * Un cours en cours de fabrication a partir de photos.
- *
- * Il n'existe pas encore comme fichier : c'est une ligne d'attente dans la
- * bibliotheque, qui dit qu'un cours arrive et ou en est sa lecture. Elle
- * disparait quand le cours devient reel, ou porte la raison de son echec.
- */
-export interface PendingConversion {
-  /** Identifiant provisoire : « <matiere>/<dossier> ». */
-  id: string
-  subject: string
-  title: string
-  /** Photos lues, et photos a lire. */
-  done: number
-  total: number
-  /** Renseigne quand la fabrication a echoue. */
-  failed?: string
-}
-
-/**
- * L'ordre dans lequel des photos deviendront un cours, avant qu'on le lance.
- *
- * Il est montre parce qu'il est devinable mais pas garanti : des photos
- * transferees perdent parfois leur date, et c'est alors le nom de fichier qui
- * decide. Une page a l'envers dans un cours de trente pages se corrige mal
- * apres coup ; la voir avant coute un regard.
- */
-export interface PhotoProposal {
-  subject: string
-  /** Le titre que portera le cours. */
-  title: string
-  /** Les photos dans l'ordre retenu. */
-  photos: { path: string; name: string }[]
-  /** Vrai quand l'ordre vient des dates de prise de vue, faux quand il vient des noms. */
-  byDate: boolean
-}
-
-/**
- * Ce qu'un import a produit — un seul geste, deux natures de fichiers.
+ * Ce qu'un import a produit.
  *
  * Il n'y a qu'un bouton « Importer », et c'est deliberé : celui qui importe a
  * des fichiers sous la main, pas des categories. C'est l'application qui
- * reconnait ce qu'on lui donne. Les formats qu'elle sait deja ouvrir sont
- * copies aussitot et reviennent dans `imported` ; les images, qui ne sont pas
- * des cours tant qu'elles n'ont pas ete lues, reviennent en proposition dont
- * l'ordre reste a confirmer. Un lot peut contenir les deux : les deux champs
- * sont alors renseignes.
+ * reconnait ce qu'on lui donne, copie ce qu'elle sait ouvrir et laisse le
+ * reste de cote.
  */
 export interface ImportResult {
   /** Identifiants des cours copies dans le vault, dans l'ordre du choix. */
   imported: string[]
-  /** Les images du meme lot, prêtes a devenir un cours. Null s'il n'y en avait pas. */
-  photos: PhotoProposal | null
 }
 
 /** Resultat de la conversion d'un document Word. */
@@ -1227,16 +915,6 @@ export interface VaultPaths {
    */
   prompts: string
   /**
-   * Les documents d'origine des cours reconstitues par OCR : PDF scannes,
-   * photos de notes manuscrites.
-   *
-   * A cote de `Cours/` et non dedans, ou le dossier serait pris pour une
-   * matiere. Et hors de `.noted/`, qui est du cache jetable : une photo de
-   * notes manuscrites est une donnee, la seule qui existe, et rien ne permet
-   * de la recalculer.
-   */
-  originals: string
-  /**
    * Les brouillons de l'assistant : ce qu'il ecrit avant que cela n'entre
    * dans la note, un fichier par cours, meme arborescence que Notes/.
    *
@@ -1284,7 +962,7 @@ export interface TutorSendInput {
  * texte : c'est l'identifiant qui fait le lien entre le fichier de reglages,
  * le code qui construit l'appel et la ligne affichee a l'ecran.
  */
-export type PromptId = 'assistant' | 'tuteur' | 'generateur' | 'memoire'
+export type PromptId = 'assistant' | 'tuteur' | 'generateur' | 'memoire' | 'descripteur'
 
 /**
  * Un bloc que l'application ajoute d'elle-meme autour du prompt d'un agent.
@@ -1329,17 +1007,15 @@ export interface NotedApi {
     /** Ouvre un fichier ou un dossier du vault dans le Finder. */
     reveal(target: string): Promise<void>
     /**
-     * Ouvre le selecteur de fichiers et recoit ce qui a ete choisi. Documents
-     * et images passent par la meme porte : voir `ImportResult`.
+     * Ouvre le selecteur de fichiers et recoit ce qui a ete choisi.
      *
      * `folder` range les documents dans un dossier de classement de la matiere,
-     * cree au besoin. Les images, elles, arrivent toujours a la racine.
+     * cree au besoin.
      */
     importCourses(subject: string, folder?: string | null): Promise<ImportResult>
     /**
      * Importe des fichiers deja designes — ceux d'un glisser-deposer. Meme
-     * partage que pour le selecteur ; les formats inconnus sont ignores en
-     * silence.
+     * tri que pour le selecteur ; les formats inconnus sont ignores en silence.
      */
     importPaths(paths: string[], subject: string, folder?: string | null): Promise<ImportResult>
     /** Cree un dossier de matiere. Renvoie le nom retenu, une fois normalise. */
@@ -1516,75 +1192,6 @@ export interface NotedApi {
      * cartes ou de changer d'etat. Renvoie la fonction de desabonnement.
      */
     onChanged(handler: () => void): () => void
-  }
-  ocr: {
-    /** Ou en est l'installation du moteur de lecture d'images. */
-    modelStatus(): Promise<OcrModelStatus>
-    /**
-     * Lance l'installation. Rend vrai quand tout est en place — ce qui peut
-     * demander des heures sur une liaison lente, la progression arrivant
-     * entre-temps par `onModelChanged`.
-     */
-    install(): Promise<boolean>
-    /**
-     * Lit une image et rend son Markdown. Rend null quand la lecture n'a pas
-     * abouti : a l'appelant de continuer sans, jamais d'echouer.
-     *
-     * L'image arrive en PNG. C'est le renderer qui la fabrique, parce que c'est
-     * lui qui sait dessiner une page de PDF — pdf.js y est chez lui, et ajouter
-     * un moteur de rendu cote Node pour refaire le meme travail serait une
-     * dependance native de plus pour rien.
-     */
-    readImage(png: Uint8Array): Promise<OcrRead | null>
-    /**
-     * Remplace un cours illisible par sa version reconstituee : le Markdown
-     * prend sa place dans la bibliotheque, l'original part dans `Originaux/`,
-     * et la note comme les surlignages suivent le nouvel identifiant.
-     */
-    convert(
-      courseId: string,
-      pages: { page: number; markdown: string }[],
-      report?: { missing: number[]; pageCount: number }
-    ): Promise<{ courseId: string; document: OcrDocument }>
-    /**
-     * Complete un cours reconstitue dont des pages manquaient : les pages
-     * fournies s'inserent a leur place, et l'en-tete oublie ce qui est lu.
-     */
-    patch(
-      courseId: string,
-      pages: { page: number; markdown: string }[]
-    ): Promise<{ missing: number[] }>
-    /**
-     * Une image du dossier media, reduite a la taille que le moteur de lecture
-     * accepte. Null quand l'image est introuvable ou trop petite pour porter
-     * du texte — une decoration, pas une page.
-     */
-    mediaPng(name: string): Promise<Uint8Array | null>
-    /** Octets de l'original archive, pour l'afficher dans l'onglet « Original ». */
-    readOriginal(relative: string): Promise<Uint8Array>
-    /**
-     * Un original Word archive, converti en HTML comme le fait le panneau de
-     * cours — l'onglet « Original » doit montrer le document, pas s'excuser.
-     */
-    readOriginalDocx(relative: string): Promise<DocxDocument>
-    /**
-     * Les fichiers d'un original qui est un dossier — le cas d'un cours fait de
-     * photos. Rend une liste vide quand l'original est un fichier unique.
-     */
-    listOriginal(relative: string): Promise<string[]>
-    /**
-     * Lance la fabrication du cours a partir d'une proposition acceptee. Rend
-     * la main aussitot : c'est la ligne d'attente qui rend compte de la suite.
-     */
-    importPhotos(proposal: PhotoProposal): Promise<void>
-    /** Les cours en cours de fabrication a partir de photos. */
-    pending(): Promise<PendingConversion[]>
-    /** Ecarte une ligne d'attente en echec. */
-    dismiss(id: string): Promise<void>
-    /** Previent quand la liste des fabrications en cours change. */
-    onPendingChanged(handler: () => void): () => void
-    /** Previent a chaque changement d'etat de l'installation. */
-    onModelChanged(handler: (status: OcrModelStatus) => void): () => void
   }
   media: {
     /**

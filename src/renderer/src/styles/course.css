@@ -478,11 +478,11 @@ button.pager-position:hover .pager-current {
   transition: background var(--normal) var(--ease);
 }
 
-/* Les trois etats du traitement, dans l'ordre ou ils se succedent : rouge tant
-   que le decoupage large n'est pas ecrit, orange pendant l'affinage, vert quand
-   tout est fait. La couleur ne dit donc pas « ca marche / ca ne marche pas »,
-   elle dit ou l'on en est — et c'est l'infobulle qui precise ce qui est deja
-   utilisable a chaque etape. */
+/* Les etats du traitement, dans l'ordre ou ils se succedent : rouge tant que le
+   decoupage large n'est pas ecrit, orange pendant l'affinage, jaune pendant la
+   description des images, vert quand tout est fait. La couleur ne dit donc pas
+   « ca marche / ca ne marche pas », elle dit ou l'on en est — et c'est
+   l'infobulle qui precise ce qui est deja utilisable a chaque etape. */
 .vector-dot[data-phase='attente'],
 .vector-dot[data-phase='calcul'] {
   background: var(--hl-incompris);
@@ -492,12 +492,17 @@ button.pager-position:hover .pager-current {
   background: var(--brass);
 }
 
+.vector-dot[data-phase='images'] {
+  background: var(--hl-retenir);
+}
+
 /* La pulsation dit « ca avance », et elle seule. L'attente pulse aussi : c'est
-   le temps de la lecture des figures et du decoupage, ou tout se passe deja,
-   meme si aucun compteur ne monte encore. L'echec, lui, est creux et immobile. */
+   le temps du decoupage, ou tout se passe deja, meme si aucun compteur ne monte
+   encore. L'echec, lui, est creux et immobile. */
 .vector-dot[data-phase='attente'],
 .vector-dot[data-phase='calcul'],
-.vector-dot[data-phase='affine'] {
+.vector-dot[data-phase='affine'],
+.vector-dot[data-phase='images'] {
   animation: vector-pulse 1.6s ease-in-out infinite;
 }
 
@@ -799,215 +804,4 @@ button.pager-position:hover .pager-current {
   font-size: var(--text-xs);
   color: var(--text-faint);
   cursor: help;
-}
-
-/* --------------------------------------------------------------------------
-   Bandeau d'un cours reconstitue par lecture d'images
-
-   Hors de la zone defilante, comme le message d'erreur : le retour a l'original
-   doit rester a portee de clic ou qu'on en soit dans le cours.
-   -------------------------------------------------------------------------- */
-
-.ocr-banner {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  background: color-mix(in srgb, var(--brass) 5%, var(--paper));
-  border-bottom: 1px solid color-mix(in srgb, var(--brass) 22%, var(--rule));
-}
-
-.ocr-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--brass) 10%, transparent);
-}
-
-.ocr-tab {
-  padding: 3px 10px;
-  border: none;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-dim);
-  font: inherit;
-  font-size: var(--text-sm);
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-.ocr-tab:hover {
-  color: var(--text);
-}
-
-.ocr-tab[data-active='true'] {
-  background: var(--paper-sheet);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
-}
-
-.ocr-note {
-  color: var(--text-dim);
-  font-size: var(--text-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* L'original : des pages a regarder, rien d'accrochable. */
-/* Sans coussin, comme le corps du panneau : les pages dessinees ici le sont a
-   la largeur pleine du cadre, et le moindre retrait les ferait deborder. */
-.original-view {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 0;
-}
-
-.original-view img,
-.original-page {
-  max-width: 100%;
-  height: auto;
-  border-radius: 2px;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
-}
-
-/* L'original d'un cours Markdown : le fichier tel quel, sans rendu. */
-.original-text {
-  align-self: stretch;
-  margin: 0;
-  padding: var(--space-4);
-  background: var(--paper-sheet);
-  border-radius: 2px;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
-  font-size: var(--text-sm);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* L'original d'un cours Word : le meme rendu que le panneau de cours, en
-   consultation seule. */
-.original-docx {
-  align-self: stretch;
-  padding: var(--space-4);
-  background: var(--paper-sheet);
-  border-radius: 2px;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
-}
-
-/* Temoin de lecture en cours, dans l'onglet « Texte lu ». */
-.ocr-spinner {
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  margin-right: 6px;
-  vertical-align: -1px;
-  border: 1.5px solid color-mix(in srgb, var(--brass) 35%, transparent);
-  border-top-color: var(--brass);
-  border-radius: 50%;
-  animation: ocr-turn 700ms linear infinite;
-}
-
-@keyframes ocr-turn {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.ocr-tab:disabled {
-  cursor: default;
-  opacity: 0.75;
-}
-
-/* Le bandeau ne doit pas se laisser ecraser par un long nom de fichier. */
-.ocr-banner .ocr-tabs {
-  flex: none;
-}
-
-/* --------------------------------------------------------------------------
-   Le meme bandeau, quand il pose une question
-
-   Une phrase entiere, et non un nom de fichier : elle doit pouvoir passer a la
-   ligne plutot que d'etre coupee, et les deux reponses rester a droite, la ou
-   se posent les boutons partout ailleurs.
-   -------------------------------------------------------------------------- */
-
-.ocr-banner--asking .ocr-note {
-  flex: 1;
-  overflow: visible;
-  white-space: normal;
-  color: var(--text);
-}
-
-.ocr-choices {
-  flex: none;
-  display: flex;
-  gap: var(--space-2);
-}
-
-.ocr-choice {
-  padding: 3px 10px;
-  border: 1px solid color-mix(in srgb, var(--brass) 30%, var(--rule));
-  border-radius: 5px;
-  background: var(--paper-sheet);
-  color: var(--text-dim);
-  font: inherit;
-  font-size: var(--text-sm);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-.ocr-choice:hover {
-  color: var(--text);
-}
-
-.ocr-choice--go {
-  border-color: transparent;
-  background: var(--brass);
-  color: var(--paper);
-  font-weight: 600;
-}
-
-.ocr-choice--go:hover {
-  color: var(--paper);
-  filter: brightness(1.06);
-}
-
-.ocr-choice:disabled {
-  cursor: default;
-  opacity: 0.75;
-  filter: none;
-}
-
-/* --------------------------------------------------------------------------
-   Un cours reconstitue auquel il manque des pages
-
-   La meme barre que le bandeau, mais en avertissement : elle dit ce qui
-   manque et propose de poursuivre la lecture depuis l'original archive.
-   -------------------------------------------------------------------------- */
-
-.ocr-missing {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  background: color-mix(in srgb, var(--brass) 12%, var(--paper));
-  border-bottom: 1px solid color-mix(in srgb, var(--brass) 30%, var(--rule));
-}
-
-.ocr-missing .ocr-note {
-  flex: 1;
-  overflow: visible;
-  white-space: normal;
-  color: var(--text);
-}
-
-.ocr-missing .ocr-choice {
-  flex: none;
 }

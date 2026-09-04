@@ -1839,7 +1839,7 @@ async function sortedNote(courseId: string, markdown: string): Promise<string> {
     const keys = await window.noted.notes.orderKeys(
       courseId,
       anchors.map(
-        (anchor) => anchor ?? { page: null, section: null, progress: null, passage: null, figure: null }
+        (anchor) => anchor ?? { page: null, section: null, progress: null, passage: null }
       )
     )
     return sortAnchoredNote(markdown, keys)

@@ -120,7 +120,7 @@ export interface DeclaredScope {
 
 /** L'ancre d'un lieu, sans passage : ce que designe une source declaree. */
 function placeAnchor(page: number | null, section: string | null): NoteAnchor {
-  return { page, section, progress: null, passage: null, figure: null }
+  return { page, section, progress: null, passage: null }
 }
 
 /**
@@ -233,11 +233,7 @@ function toAnchor(chunk: FineChunk): NoteAnchor {
     page: chunk.page,
     section: chunk.page === null ? chunk.heading : null,
     progress: null,
-    passage: { text: chunk.text, before: chunk.before, after: chunk.after },
-    // Ce que dit une image n'est nulle part dans le document affiche : sans
-    // ce rang, la note s'ancrerait bien au schema dont elle parle, et le
-    // point de la marge n'aurait rien a encadrer.
-    figure: chunk.figure
+    passage: { text: chunk.text, before: chunk.before, after: chunk.after }
   }
 }
 

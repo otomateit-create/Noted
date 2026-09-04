@@ -260,10 +260,7 @@ export default function NotesGutter({ editor, onGoTo }: NotesGutterProps): React
       target.anchor.page !== null ||
       target.anchor.section !== null ||
       target.anchor.progress !== null
-    // La figure part avec le passage : sans texte a designer, un rang d'image
-    // ne dit plus rien, et le clic continuerait pourtant d'y ramener.
-    const next =
-      target.anchor.passage && place ? { ...target.anchor, passage: null, figure: null } : null
+    const next = target.anchor.passage && place ? { ...target.anchor, passage: null } : null
 
     editor.commands.command(({ tr, dispatch }) => {
       if (dispatch) tr.setNodeAttribute(target.at, 'ancre', next)
@@ -293,11 +290,7 @@ export default function NotesGutter({ editor, onGoTo }: NotesGutterProps): React
             style={{ top: run.lineTop, height: run.lineHeight }}
             title={
               run.anchor.passage
-                ? run.anchor.figure !== null
-                  ? // Le texte d'une figure a ete lu dans l'image : le citer entre
-                    // guillemets le ferait passer pour une phrase du cours.
-                    "Schéma du cours — cliquer pour l'encadrer et voir toutes les notes qui s'y rapportent"
-                  : `« ${run.anchor.passage.text} » — cliquer pour y retourner et voir toutes les notes de ce passage`
+                ? `« ${run.anchor.passage.text} » — cliquer pour y retourner et voir toutes les notes de ce passage`
                 : `${anchorLabel(run.anchor)} — cliquer pour y retourner`
             }
             onClick={() => {

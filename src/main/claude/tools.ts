@@ -45,6 +45,7 @@ import type {
 } from '../../shared/types'
 import { readAnnotations } from '../annotations'
 import { appendManualCards } from '../flashcards/store'
+import { withDescriptions } from '../figures/markers'
 import { listNoteObjects, uniqueTarget } from '../note-objects'
 import type { NoteObject } from '../note-objects'
 import { readNote } from '../notes'
@@ -541,7 +542,7 @@ function buildLire(sdk: AgentSdk, courseId: string, turn?: TurnTrace) {
           )
         }
         remember(turn, chunks)
-        return say(render(chunks))
+        return say(withDescriptions(render(chunks), course.figures))
       }
 
       const span = parsePageReference(reference)
@@ -573,7 +574,10 @@ function buildLire(sdk: AgentSdk, courseId: string, turn?: TurnTrace) {
       }
 
       remember(turn, shown)
-      return say(parts.join('\n\n---\n\n'))
+      // Les descriptions d'images se posent ici, sur le texte qui part, et
+      // nulle part avant : elles ne sont ni dans les passages ni dans les
+      // vecteurs, et « rechercher » ne doit pas les voir (voir markers.ts).
+      return say(withDescriptions(parts.join('\n\n---\n\n'), course.figures))
     },
     READ_ONLY
   )

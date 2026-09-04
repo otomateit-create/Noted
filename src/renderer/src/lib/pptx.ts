@@ -500,8 +500,8 @@ async function renderPicture(shape: Element, context: Context): Promise<string |
 
   // L'image part sur le disque sous son empreinte et le HTML n'en porte que
   // l'adresse : c'est ce qui rend l'affichage immediat, et c'est aussi ce qui
-  // permet a la lecture par OCR de retrouver le fichier pour en tirer le texte
-  // d'un schema.
+  // permet de retrouver le fichier pour faire decrire le schema apres la
+  // vectorisation.
   const name = await window.noted.media.keep(bytes, type)
 
   const properties = child(shape, NS.presentation, 'nvPicPr')

@@ -14,7 +14,6 @@
  */
 
 import type { ExtractedCourse } from '../../shared/types'
-import { whenOcrIdle } from '../ocr/engine'
 import { chunkCourseFine, type FineChunk } from './chunk-fine'
 import { EMBEDDING_MODEL, embed } from './embedder'
 import { FineIndex } from './fine-index'
@@ -121,10 +120,10 @@ export function prepareCourseFine(extracted: ExtractedCourse): void {
  * Lance — ou reprend — la vectorisation fine d'un cours deja decoupe.
  *
  * Appele par le round large au moment ou il s'acheve, et lui seul : c'est
- * l'ordre voulu, la lecture d'images d'abord, le decoupage large ensuite, le
- * fin en dernier. Un calcul interrompu reprend ici sans rien de plus, parce que
- * `loadVectors` relit ce qui est deja sur le disque et que la boucle repart de
- * la — exactement comme le round large le fait depuis toujours.
+ * l'ordre voulu, le decoupage large d'abord, le fin ensuite. Un calcul
+ * interrompu reprend ici sans rien de plus, parce que `loadVectors` relit ce
+ * qui est deja sur le disque et que la boucle repart de la — exactement comme
+ * le round large le fait depuis toujours.
  */
 export function startCourseFine(courseId: string, report: FineReport): void {
   const entry = courses.get(courseId)
@@ -160,12 +159,10 @@ function launch(entry: FineIndexedCourse, chunks: FineChunk[], report: FineRepor
  * Vectorise le decoupage fin d'un cours, en reprenant ce qui est deja calcule.
  *
  * Copie assumee de `vectorise()` — voir le bloc sur les constantes plus haut —
- * allegee de tout ce qui parlait a l'interface. Trois choses ne s'allegent pas :
+ * allegee de tout ce qui parlait a l'interface. Deux choses ne s'allegent pas :
  * la reprise, qui ne coute rien de plus que de lire le cache avant de calculer ;
- * l'attente de la lecture d'images, parce que la memoire de la machine ne se
- * divise pas en trois ; et la verification que le cours est toujours celui qu'on
- * croit, parce qu'un vecteur rattache au mauvais passage est bien pire que pas
- * de vecteur du tout.
+ * et la verification que le cours est toujours celui qu'on croit, parce qu'un
+ * vecteur rattache au mauvais passage est bien pire que pas de vecteur du tout.
  */
 async function vectoriseFine(
   entry: FineIndexedCourse,
@@ -204,14 +201,6 @@ async function vectoriseFine(
   let echecs = 0
 
   while (vectors.length < chunks.length) {
-    if (!current()) return
-
-    // La lecture d'images passe devant, comme pour le round large — et a plus
-    // forte raison : ce troisieme calcul de fond arrive sur une machine dont
-    // deux modeles se disputent deja les huit gigaoctets. Attendre par tranche
-    // et non une seule fois avant la boucle, parce qu'un cours scanne peut
-    // s'ouvrir au milieu de la vectorisation d'un autre.
-    await whenOcrIdle()
     if (!current()) return
 
     const slice = chunks.slice(vectors.length, vectors.length + SLICE)

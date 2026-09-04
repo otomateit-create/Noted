@@ -18,6 +18,7 @@ import { assistantAnnexes } from '../claude/prompt'
 import { memoireAnnexes } from '../claude/recall'
 import { tutorAnnexes } from '../claude/tutor'
 import { generationAnnexes } from '../flashcards/generation'
+import { descriptionAnnexes } from '../figures/describe'
 import { promptPath, PROMPT_IDS, readPrompt, shippedPrompt, writePrompt } from './store'
 
 interface Descriptor {
@@ -55,6 +56,12 @@ const CATALOG: Record<PromptId, Descriptor> = {
     description:
       "Tous les huit échanges, joint à ton message : la méthode que l'assistant suit pour relire la conversation et en tirer ce qui mérite d'être retenu sur toi. Ce n'est pas un agent de plus — c'est ce qu'on demande à l'assistant à ce moment-là.",
     annexes: memoireAnnexes
+  },
+  descripteur: {
+    label: "Le descripteur d'images",
+    description:
+      "En tâche de fond, sans rien afficher : une fois le cours vectorisé, il regarde chaque image du document — schéma, graphique, tableau mis en image — et écrit ce qu'elle montre. L'assistant lit ces descriptions dans « lire », à la place des marqueurs de figure, et ouvre l'image elle-même quand un détail compte.",
+    annexes: descriptionAnnexes
   }
 }
 

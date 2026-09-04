@@ -133,7 +133,7 @@ function opensFormula(tex: string, before: string | undefined): boolean {
   return true
 }
 
-/** Les formes \( … \) et \[ … \], emises par les modeles d'OCR et de chat. */
+/** Les formes \( … \) et \[ … \], que produisent certains convertisseurs. */
 const INLINE_PARENS = /\\\(([^\n]+?)\\\)/g
 const DISPLAY_BRACKETS = /\\\[([\s\S]+?)\\\]/g
 

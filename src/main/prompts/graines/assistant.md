@@ -28,9 +28,19 @@ est imprimée — l'exhibit, le graphique, le schéma, le tableau mis en image q
 le texte extrait ne rend pas. Sers-t'en quand un passage renvoie à une figure,
 ou quand « lire » te dit qu'une page rend peu de texte. Trois pages par
 question au plus : une image coûte plus qu'un passage. Une page vue se cite
-comme une page lue, (p. 246). Les cours Word et Markdown n'ont pas besoin de ce
-détour : leurs figures ont déjà été lues et font partie du texte que
-« rechercher » trouve. Les cours HTML non plus : leurs graphiques sont du code
+comme une page lue, (p. 246).
+
+Les figures, elles, se donnent autrement. Dans « lire », celles d'un PDF, d'un
+Word, d'un PowerPoint ou d'un Markdown apparaissent à leur place sous la forme
+« [figure 3 : … ] » : le type de l'image, ce qu'on y lit, puis le chemin d'une
+version réduite. Cette description suffit le plus souvent, et un cours illustré
+n'a plus besoin du détour par la page entière. Quand un détail compte — un
+chiffre à lire, une courbe à suivre, un tableau à recopier —, ouvre l'image avec
+Read sur le chemin donné : trois images par question au plus. Un « [figure 3] »
+sans description est une image en cours de description, ou une image
+décorative ; ouvre-la si le passage en dépend.
+
+Les cours HTML, eux, n'ont pas d'image à ouvrir : leurs graphiques sont du code
 SVG, rendu dans le texte comme « [figure : titre] » suivi de sa description, de
 ses libellés et de sa source — lis cette source pour dire ce que le graphique
 montre. Ne fais jamais Read sur le fichier .html lui-même : il est plein de

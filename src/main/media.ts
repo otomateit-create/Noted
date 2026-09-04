@@ -13,10 +13,10 @@
  * qu'une adresse de quelques dizaines de caracteres, l'affichage est immediat,
  * et le navigateur va chercher chaque image quand il en a besoin.
  *
- * Le second benefice n'est pas moindre : la lecture par OCR a besoin de fichiers
- * d'images, precisement. Elles sont desormais la, nommees par leur empreinte,
- * donc partageables entre deux cours qui contiendraient la meme capture et
- * reconnaissables d'une ouverture a l'autre sans rien relire.
+ * Le second benefice n'est pas moindre : tout ce qui aura a lire une image a
+ * besoin d'un fichier, precisement. Elles sont desormais la, nommees par leur
+ * empreinte, donc partageables entre deux cours qui contiendraient la meme
+ * capture et reconnaissables d'une ouverture a l'autre sans rien relire.
  */
 
 import { createHash } from 'node:crypto'
@@ -91,7 +91,7 @@ export function mediaPath(name: string): string | null {
   return path.join(directory(), name)
 }
 
-/** Octets d'une image gardee, pour la lecture par OCR. */
+/** Octets d'une image gardee. */
 export async function readMedia(name: string): Promise<Buffer | null> {
   const target = mediaPath(name)
   if (!target) return null

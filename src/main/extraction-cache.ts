@@ -5,18 +5,14 @@
  * **Ce que cela coute aujourd'hui.** Lire un PDF, ce n'est pas lire un fichier
  * texte : chaque page est parcourue glyphe par glyphe, ses fragments sont
  * regroupes en lignes puis en paragraphes, ses en-tetes courants reperes, ses
- * images decodees une a une pour en tirer les figures. Sur un cours de cinq
- * cents pages, cela se compte en dizaines de secondes — et c'etait refait a
- * l'identique a chaque ouverture, alors que le fichier n'avait pas bouge d'un
+ * images decodees une a une pour etre posees sur le disque. Sur un cours de
+ * cinq cents pages, cela se compte en dizaines de secondes — et c'etait refait
+ * a l'identique a chaque ouverture, alors que le fichier n'avait pas bouge d'un
  * octet. La barre de lecture qui defile a l'ouverture d'un cours deja lu la
  * veille ne mesure rien d'autre que ce gachis.
  *
- * **Ce qui est garde.** Le texte tel que l'extraction l'a rendu, avant que les
- * captures d'ecran ne soient lues : marqueurs `[figure]` compris. La lecture
- * des images, elle, garde son propre cache et reste refaite a chaque ouverture
- * — c'est ce qui permet a un cours ouvert avant l'installation du moteur d'OCR
- * de recuperer le texte de ses schemas des que le moteur arrive. Figer ici le
- * resultat des figures reviendrait a mettre un manque en cache pour toujours.
+ * **Ce qui est garde.** Le texte tel que l'extraction l'a rendu, marqueurs
+ * `[figure]` compris, et la liste des images qu'ils designent.
  *
  * **Seuls les PDF.** Un Word ou un PowerPoint doit de toute facon etre converti
  * pour etre affiche, et le texte envoye a l'IA est tire de cette conversion :
@@ -180,9 +176,8 @@ export async function saveExtraction(extracted: ExtractedCourse): Promise<void> 
  * le reclame, et le cours deplace serait relu entierement.
  */
 export async function renameExtraction(previousId: string, nextId: string): Promise<void> {
-  // Une conversion par OCR remplace un PDF par un Markdown : l'ancien texte ne
-  // decrit plus rien de ce qui porte ce nom, et le nouveau format n'a pas de
-  // cache. Il part plutot que de suivre.
+  // Un cours qui change de format n'a plus de cache : l'ancien texte ne decrit
+  // plus rien de ce qui porte ce nom. Il part plutot que de suivre.
   if (!cacheable(nextId)) {
     await deleteExtraction(previousId)
     return

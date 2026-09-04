@@ -251,7 +251,6 @@
 .matter-format[data-format='html'] { --fh: 185; }
 .matter-format[data-format='markdown'] { --fh: 75; }
 .matter-format[data-format='pptx'] { --fh: 40; }
-.matter-format[data-format='pending'] { --fh: 75; }
 
 .matter-doc-title {
   margin: 0 3px;
@@ -367,38 +366,6 @@
 .matter-add svg {
   width: 22px;
   height: 22px;
-}
-
-/* --- Un cours qui arrive --------------------------------------------------
-   Une serie d'images se lit en plusieurs minutes. La carte tient sa place
-   dans la mosaique pendant ce temps, mais en retrait : elle ne s'ouvre pas
-   encore. */
-
-.matter-doc--pending {
-  opacity: 0.7;
-}
-
-.matter-doc--pending:hover {
-  transform: none;
-}
-
-.matter-doc-progress {
-  flex: 1;
-  min-width: 0;
-  font-size: 11.5px;
-  color: var(--shell-text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.matter-doc-progress--failed {
-  color: var(--shell-danger);
-}
-
-.matter-doc-dismiss {
-  padding: 3px 8px;
-  font-size: 11.5px;
 }
 
 /* --- Renommer, supprimer -------------------------------------------------- */

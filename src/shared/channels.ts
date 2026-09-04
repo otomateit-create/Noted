@@ -88,35 +88,6 @@ export const CHANNELS = {
   /** Sens main -> renderer : deltas de la reponse en cours. */
   claudeStream: 'claude:stream',
 
-  /** Etat de l'installation du moteur de lecture d'images. */
-  ocrModelStatus: 'ocr:model-status',
-  /** Sens main -> renderer : cet etat vient de changer. */
-  ocrModelChanged: 'ocr:model-changed',
-  /** Lance l'installation du moteur. Sans effet s'il est deja la. */
-  ocrInstall: 'ocr:install',
-  /** Lit une image et rend son Markdown. */
-  ocrReadImage: 'ocr:read-image',
-  /** Remplace un cours illisible par sa version reconstituee. */
-  ocrConvert: 'ocr:convert',
-  /** Octets de l'original archive, pour l'onglet qui le montre. */
-  ocrReadOriginal: 'ocr:read-original',
-  /** Un original Word archive, converti en HTML pour le meme onglet. */
-  ocrReadOriginalDocx: 'ocr:read-original-docx',
-  /** Les fichiers d'un original qui est un dossier de photos. */
-  ocrListOriginal: 'ocr:list-original',
-  /** Importe comme un seul cours des photos dont l'ordre a ete accepte. */
-  ocrImportPhotos: 'ocr:import-photos',
-  /** Les cours en cours de fabrication a partir de photos. */
-  ocrPending: 'ocr:pending',
-  /** Ecarte une ligne d'attente en echec. */
-  ocrDismiss: 'ocr:dismiss',
-  /** Sens main -> renderer : la liste des fabrications a change. */
-  ocrPendingChanged: 'ocr:pending-changed',
-  /** Complete un cours reconstitue dont des pages manquaient. */
-  ocrPatch: 'ocr:patch',
-  /** Une image du dossier media, reduite pour le moteur de lecture. */
-  ocrMediaPng: 'ocr:media-png',
-
   /** Depose une image dans le dossier media et rend son nom. */
   mediaKeep: 'media:keep',
 

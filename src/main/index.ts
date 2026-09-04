@@ -6,9 +6,7 @@ import { declareMediaScheme, serveMedia } from './media'
 import { buildMenu } from './menu'
 import { disposeAllSessions } from './claude/session'
 import { scanForGeneration } from './flashcards/generation'
-import { disposeOcr, ocrBusy } from './ocr/engine'
 import { seedPrompts } from './prompts/store'
-import { disposeLayout } from './ocr/layout'
 import { disposeEmbedder, embedderBusy } from './rag/embedder'
 import { veillerSurLesCours } from './veille'
 import { ensureVault } from './vault'
@@ -118,18 +116,6 @@ app.on('window-all-closed', () => {
   // fois qu'il n'y aura plus rien a attendre.
   if (!embedderBusy()) disposeEmbedder()
 
-  // Meme regle pour la lecture d'images, et elle compte davantage encore : le
-  // moteur garde un gigaoctet et demi de poids en memoire, contre trois cents
-  // megaoctets pour les vecteurs. Une conversion en cours va au bout — la
-  // minuterie d'inactivite s'en chargera ensuite.
-  if (!ocrBusy()) {
-    disposeOcr()
-    // Le detecteur de mise en page a sa propre minuterie de quinze secondes,
-    // mais rien ne justifie de garder ses 586 Mo quand plus aucune fenetre
-    // n'est ouverte.
-    disposeLayout()
-  }
-
   if (process.platform !== 'darwin') {
     app.quit()
   }
@@ -153,6 +139,4 @@ app.on('before-quit', () => {
   // a l'application.
   disposeAllSessions()
   disposeEmbedder()
-  disposeOcr()
-  disposeLayout()
 })

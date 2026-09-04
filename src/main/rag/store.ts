@@ -17,7 +17,8 @@ import type {
   VectorPhase,
   VectorStatus
 } from '../../shared/types'
-import { whenOcrIdle } from '../ocr/engine'
+import { describeFigures } from '../figures/describe'
+import type { FigureDescription } from '../figures/markers'
 import { chunkCourse, type Chunk } from './chunk'
 import { EMBEDDING_MODEL, embed } from './embedder'
 import { CourseIndex } from './search'
@@ -52,6 +53,28 @@ export interface IndexedCourse {
   status: VectorStatus
   /** Vrai tant qu'un calcul est en cours sur ce cours. */
   running: boolean
+  /**
+   * Les images du document, dans l'ordre d'apparition : la n-ieme donne le
+   * marqueur « [figure n] » du texte.
+   */
+  media: string[]
+  /**
+   * Ce que les images disent, par rang de marqueur. Vide tant que la
+   * description n'a pas eu lieu, et vide pour toujours sur un cours sans image
+   * ou dont les images sont toutes decoratives.
+   */
+  figures: Map<number, FigureDescription>
+  /**
+   * La description en cours, s'il y en a une — et ou elle en est.
+   *
+   * Sert de verrou : un cours rouvert pendant la description repasse par
+   * `launch`, relit ses vecteurs en cache et rappelle la fin du second round,
+   * ce qui lancerait une seconde serie d'appels sur les memes images. Porte la
+   * progression parce que ce meme chemin republie « complet » au passage : il
+   * faut de quoi remettre le point sur les images sans avoir a redemander au
+   * descripteur ou il en est.
+   */
+  describing: { done: number; total: number } | null
 }
 
 const courses = new Map<string, IndexedCourse>()
@@ -104,12 +127,12 @@ export function watchVectorStatus(handler: (status: VectorStatus) => void): void
 /**
  * Les cours dont le texte est arrive mais dont l'index n'existe pas encore.
  *
- * Entre l'arrivee du texte et la creation de l'entree, il se passe la lecture
- * des figures puis le decoupage en passages — une trentaine de secondes sur un
- * cours de cinq cents pages. Sans cet etat, le cours n'avait aucun point a
- * l'ecran pendant tout ce temps : « en preparation » se confondait avec « rien
- * ne se passe ». On ne le pose que pour un cours inconnu : un cours deja
- * indexe garde son etat, complet ou en cours, et ne retombe pas a zero.
+ * Entre l'arrivee du texte et la creation de l'entree, il se passe le
+ * decoupage en passages — une trentaine de secondes sur un cours de cinq cents
+ * pages. Sans cet etat, le cours n'avait aucun point a l'ecran pendant tout ce
+ * temps : « en preparation » se confondait avec « rien ne se passe ». On ne le
+ * pose que pour un cours inconnu : un cours deja indexe garde son etat, complet
+ * ou en cours, et ne retombe pas a zero.
  */
 const preparing = new Map<string, VectorStatus>()
 
@@ -178,7 +201,10 @@ export function indexCourse(extracted: ExtractedCourse): IndexedCourse {
       done: 0,
       total: chunks.length
     },
-    running: false
+    running: false,
+    media: extracted.media ?? [],
+    figures: new Map(),
+    describing: null
   }
 
   courses.set(extracted.courseId, entry)
@@ -299,15 +325,6 @@ async function vectorise(entry: IndexedCourse, chunks: Chunk[]): Promise<void> {
   while (vectors.length < chunks.length) {
     if (!current()) return
 
-    // La lecture d'images passe devant, toujours. Les deux modeles font a eux
-    // deux deux gigaoctets de poids, pour une machine qui en a huit et dont le
-    // systeme et l'interface prennent deja la moitie : les laisser tourner
-    // ensemble envoie tout le reste dans la memoire virtuelle. C'est une
-    // attente par tranche, et non une attente unique avant la boucle — un cours
-    // scanne peut s'ouvrir au milieu de la vectorisation d'un autre.
-    await whenOcrIdle()
-    if (!current()) return
-
     const slice = chunks.slice(vectors.length, vectors.length + SLICE)
     const { vectors: computed, reason } = await embed(
       slice.map((chunk) => chunk.text),
@@ -352,11 +369,10 @@ async function vectorise(entry: IndexedCourse, chunks: Chunk[]): Promise<void> {
  * Le round large est fini : on passe la main au round fin.
  *
  * L'ordre n'est pas un detail de mise en oeuvre, c'est ce que le point de
- * progression raconte. La lecture d'images d'abord, puis le decoupage large —
- * celui dont depend chaque reponse de l'assistant —, et seulement quand il est
- * entierement ecrit sur le disque, l'affinage. Les faire courir ensemble
- * revenait a ralentir de moitie celui qu'on attend pour avancer celui dont on
- * peut se passer.
+ * progression raconte. Le decoupage large d'abord — celui dont depend chaque
+ * reponse de l'assistant —, et seulement quand il est entierement ecrit sur le
+ * disque, l'affinage. Les faire courir ensemble revenait a ralentir de moitie
+ * celui qu'on attend pour avancer celui dont on peut se passer.
  *
  * Un echec de l'affinage ne repasse pas le cours en « echec » : la recherche
  * marche, elle vient d'etre calculee. Il laisse le point a l'orange, avec sa
@@ -368,15 +384,86 @@ function affiner(entry: IndexedCourse): void {
 
   startCourseFine(entry.courseId, ({ done, total, fini, reason }) => {
     if (!current()) return
-    entry.status = {
-      courseId: entry.courseId,
-      phase: fini ? 'complet' : 'affine',
-      done,
-      total,
-      reason
+
+    // Le seul point de fin des deux rounds, et donc le seul endroit d'ou les
+    // images puissent partir se faire decrire.
+    if (fini) {
+      describeImages(entry, done, total)
+      return
     }
+
+    entry.status = { courseId: entry.courseId, phase: 'affine', done, total, reason }
     announce(entry.status)
   })
+}
+
+/**
+ * Les deux rounds sont finis : reste, sur un document illustre, a faire decrire
+ * ses images.
+ *
+ * Elles passent en dernier parce qu'elles ne servent a rien de ce qui precede :
+ * les descriptions n'entrent pas dans les vecteurs, l'assistant les lit dans
+ * « lire » et rien d'autre. Le cours est donc deja entierement cherchable quand
+ * cette etape commence — c'est ce que dit le point jaune, qui n'annonce pas un
+ * travail qu'on attend mais un supplement qui arrive.
+ *
+ * A la deuxieme ouverture du cours, tout est en cache : l'etape ne dure que le
+ * temps de relire une vingtaine de petits fichiers.
+ */
+function describeImages(entry: IndexedCourse, done: number, total: number): void {
+  const current = (): boolean => courses.get(entry.courseId) === entry
+
+  // Ce que « complet » annonce reste le compte des passages, et non celui des
+  // images : c'est l'infobulle du point vert qui parle, et elle dit « N passages
+  // affines ». Y glisser le nombre d'images ferait croire a un cours de vingt et
+  // un passages.
+  const finish = (): void => {
+    if (!current()) return
+    entry.status = { courseId: entry.courseId, phase: 'complet', done, total }
+    announce(entry.status)
+  }
+
+  const progress = (fait: number, sur: number): void => {
+    entry.describing = { done: fait, total: sur }
+    if (!current()) return
+    entry.status = { courseId: entry.courseId, phase: 'images', done: fait, total: sur }
+    announce(entry.status)
+  }
+
+  if (entry.media.length === 0) {
+    finish()
+    return
+  }
+
+  // Le cours a ete rouvert pendant la description : le round large a relu son
+  // cache en quelques millisecondes et vient de republier « complet » par-dessus
+  // un travail qui n'est pas fini. On remet le point sur les images et on laisse
+  // la description en cours aller au bout.
+  if (entry.describing) {
+    progress(entry.describing.done, entry.describing.total)
+    return
+  }
+
+  // Le total definitif — les seules images retenues — n'est connu qu'apres les
+  // reductions, qui prennent quelques secondes. D'ici la, le nombre de figures du
+  // document est une approximation honnete, et vaut mieux qu'un point qui reste
+  // sur l'affinage sans rien dire.
+  progress(0, entry.media.length)
+
+  void describeFigures(entry.media, progress)
+    .then((figures) => {
+      entry.figures = figures
+    })
+    .catch((cause: unknown) => {
+      // Une description qui ne vient pas ne casse rien : le cours est indexe et
+      // les marqueurs restent nus. Le dire ici est le seul endroit ou cela se
+      // voie, faute d'un etat d'echec qui aurait un sens a l'ecran.
+      console.warn(`[figures] description impossible pour ${entry.courseId} :`, cause)
+    })
+    .finally(() => {
+      entry.describing = null
+      finish()
+    })
 }
 
 export function indexedCourse(courseId: string): IndexedCourse | null {

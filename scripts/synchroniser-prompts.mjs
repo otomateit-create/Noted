@@ -20,7 +20,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ID = ['assistant', 'tuteur', 'generateur', 'memoire']
+const ID = ['assistant', 'tuteur', 'generateur', 'memoire', 'descripteur']
 
 // Le meme chemin que main/vault.ts. Un script de construction ne peut pas
 // importer le code de l'application : il tourne avant qu'elle soit batie.

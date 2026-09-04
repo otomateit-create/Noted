@@ -38,11 +38,6 @@ import type {
   NoteProposal,
   NoteProposalStatus,
   NotedApi,
-  OcrDocument,
-  OcrModelStatus,
-  OcrRead,
-  PendingConversion,
-  PhotoProposal,
   PromptId,
   PromptSetting,
   QuizForm,
@@ -259,51 +254,6 @@ const api: NotedApi = {
       ipcRenderer.on(CHANNELS.flashcardsChanged, listener)
       return () => {
         ipcRenderer.removeListener(CHANNELS.flashcardsChanged, listener)
-      }
-    }
-  },
-
-  ocr: {
-    modelStatus: (): Promise<OcrModelStatus> => ipcRenderer.invoke(CHANNELS.ocrModelStatus),
-    install: (): Promise<boolean> => ipcRenderer.invoke(CHANNELS.ocrInstall),
-    readImage: (png: Uint8Array): Promise<OcrRead | null> =>
-      ipcRenderer.invoke(CHANNELS.ocrReadImage, png),
-    convert: (
-      courseId: string,
-      pages: { page: number; markdown: string }[],
-      report?: { missing: number[]; pageCount: number }
-    ): Promise<{ courseId: string; document: OcrDocument }> =>
-      ipcRenderer.invoke(CHANNELS.ocrConvert, courseId, pages, report),
-    patch: (
-      courseId: string,
-      pages: { page: number; markdown: string }[]
-    ): Promise<{ missing: number[] }> => ipcRenderer.invoke(CHANNELS.ocrPatch, courseId, pages),
-    mediaPng: (name: string): Promise<Uint8Array | null> =>
-      ipcRenderer.invoke(CHANNELS.ocrMediaPng, name),
-    readOriginal: (relative: string): Promise<Uint8Array> =>
-      ipcRenderer.invoke(CHANNELS.ocrReadOriginal, relative),
-    readOriginalDocx: (relative: string): Promise<DocxDocument> =>
-      ipcRenderer.invoke(CHANNELS.ocrReadOriginalDocx, relative),
-    listOriginal: (relative: string): Promise<string[]> =>
-      ipcRenderer.invoke(CHANNELS.ocrListOriginal, relative),
-    importPhotos: (proposal: PhotoProposal): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ocrImportPhotos, proposal),
-    pending: (): Promise<PendingConversion[]> => ipcRenderer.invoke(CHANNELS.ocrPending),
-    dismiss: (id: string): Promise<void> => ipcRenderer.invoke(CHANNELS.ocrDismiss, id),
-
-    onPendingChanged: (handler: () => void): (() => void) => {
-      const listener = (): void => handler()
-      ipcRenderer.on(CHANNELS.ocrPendingChanged, listener)
-      return () => {
-        ipcRenderer.removeListener(CHANNELS.ocrPendingChanged, listener)
-      }
-    },
-
-    onModelChanged: (handler: (status: OcrModelStatus) => void): (() => void) => {
-      const listener = (_event: unknown, payload: OcrModelStatus): void => handler(payload)
-      ipcRenderer.on(CHANNELS.ocrModelChanged, listener)
-      return () => {
-        ipcRenderer.removeListener(CHANNELS.ocrModelChanged, listener)
       }
     }
   },

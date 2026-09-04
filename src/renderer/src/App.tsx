@@ -741,7 +741,6 @@ export default function App(): React.JSX.Element {
             onVisibleUnits={setVisibleUnits}
             onSections={setSections}
             goTo={courseGoTo}
-          onConverted={handleMoved}
           />
           )}
 

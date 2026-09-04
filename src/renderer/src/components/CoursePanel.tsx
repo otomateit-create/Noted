@@ -4,18 +4,14 @@ import { createPortal } from 'react-dom'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { HIGHLIGHT_COLORS } from '@shared/types'
-import type { Annotation, Course, CourseMove, HighlightColorId, NoteAnchor } from '@shared/types'
+import type { Annotation, Course, HighlightColorId, NoteAnchor } from '@shared/types'
 import type { ExtractedCourse, ExtractedPage, VectorStatus } from '@shared/types'
 import AnnotationPalette from './AnnotationPalette'
 import AnnotationsDrawer from './AnnotationsDrawer'
 import DocumentFinder from './DocumentFinder'
-import OcrBanner, { type OcrView } from './OcrBanner'
-import OriginalView from './OriginalView'
 import HighlightLegend from './HighlightLegend'
 import PdfPage from './PdfPage'
 import { useAnnotations } from '../hooks/useAnnotations'
-import { useOcrConversion, type ConversionSource } from '../hooks/useOcrConversion'
-import { useOcrResume } from '../hooks/useOcrResume'
 import { describeSelection, locateAnnotation, type Passage } from '../lib/annotate'
 import type { ChatMention } from './ChatPanel'
 import {
@@ -35,9 +31,8 @@ import {
 } from '../lib/document'
 import { HTML_COURSE_SCOPE, htmlCourseToContextText, prepareHtmlCourse } from '../lib/html-course'
 import { withoutFrontMatter } from '../lib/markdown'
-import { elementBox, passageBoxes, type Box } from '../lib/anchors'
+import { passageBoxes, type Box } from '../lib/anchors'
 import { headingAbove } from '../lib/find'
-import { readOcrCourse, type OcrCourse } from '../lib/ocr-document'
 import { extractCourse, loadDocument, type OpenDocument } from '../lib/pdf'
 import { convertPptx } from '../lib/pptx'
 import { readingSpot, rememberSpot } from '../lib/reading'
@@ -226,12 +221,6 @@ interface CoursePanelProps {
    * fait que suivre le defilement, auquel cas rien ne doit se voir.
    */
   goTo: { anchor: NoteAnchor; nonce: number; signal: boolean } | null
-  /**
-   * Un document illisible vient d'etre remplace par sa version lue. Son
-   * identifiant a change — l'extension passe de .pdf a .md — et tout ce qui le
-   * designe doit suivre.
-   */
-  onConverted: (moves: CourseMove[]) => void
 }
 
 interface DocumentState {
@@ -289,8 +278,7 @@ export default function CoursePanel({
   onReading,
   onVisibleUnits,
   onSections,
-  goTo,
-  onConverted
+  goTo
 }: CoursePanelProps): React.JSX.Element {
   const [state, setState] = useState<DocumentState | null>(null)
   /** Rendu des formats sans pagination — Word et Markdown. */
@@ -348,31 +336,6 @@ export default function CoursePanel({
    * ne declenche pas.
    */
   const [htmlRoot, setHtmlRoot] = useState<HTMLElement | null>(null)
-  /**
-   * Renseigne quand le cours affiche a ete reconstitue par lecture d'images.
-   * Null pour tous les autres, c'est-a-dire l'immense majorite.
-   */
-  const [ocrCourse, setOcrCourse] = useState<OcrCourse | null>(null)
-  /**
-   * L'onglet affiche. « Texte lu » au premier abord, puis le choix contraire est
-   * retenu par cours : basculer sur l'original pour verifier un schema ne doit
-   * pas etre a refaire a chaque ouverture.
-   */
-  const [ocrView, setOcrView] = useState<OcrView>('ocr')
-  /**
-   * Vrai quand l'extraction du texte n'a presque rien rendu : le document est
-   * un scan, une suite de photos, ou un support fait d'images. C'est cette
-   * mesure — et non une supposition sur le nom ou le format — qui declenche la
-   * lecture par OCR.
-   */
-  const [scanned, setScanned] = useState(false)
-
-  /**
-   * Les images lisibles du document — celles du dossier media, dans l'ordre du
-   * texte. C'est la source de conversion d'un Word ou d'un Markdown fait
-   * d'images, qui n'ont pas de pages a dessiner : chaque image en devient une.
-   */
-  const [figureMedia, setFigureMedia] = useState<string[] | null>(null)
 
   /** Grossissement du document, 1 valant la largeur du panneau. */
   const [zoom, setZoom] = useState(1)
@@ -387,31 +350,6 @@ export default function CoursePanel({
   const [target, setTarget] = useState<Target | null>(null)
 
   const { annotations, add, remove, comment, recolour } = useAnnotations(course?.id ?? null)
-
-  /**
-   * D'ou la conversion tirerait ses pages : le PDF ouvert, ou les images du
-   * document. Memoise, parce que l'effet de conversion en depend — un objet
-   * neuf a chaque rendu relancerait la lecture depuis le debut.
-   */
-  const conversionSource = useMemo<ConversionSource | null>(() => {
-    if (state?.document) return { kind: 'pdf', document: state.document }
-    if (figureMedia && figureMedia.length > 0) return { kind: 'media', names: figureMedia }
-    return null
-  }, [state?.document, figureMedia])
-
-  /**
-   * La lecture d'un document illisible, en arriere-plan. Elle ne retarde rien :
-   * le document reste affiche et parcourable pendant que ses pages sont lues.
-   */
-  const conversion = useOcrConversion(
-    loadedId,
-    conversionSource,
-    scanned,
-    onConverted
-  )
-
-  /** La reprise d'un cours reconstitue dont des pages manquent. */
-  const resume = useOcrResume(loadedId, ocrCourse)
 
   const bodyRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLElement>(null)
@@ -469,13 +407,6 @@ export default function CoursePanel({
     setState(null)
     setDocumentHtml(null)
     setDocumentSkin(null)
-    setOcrCourse(null)
-    setScanned(false)
-    setFigureMedia(null)
-    // L'onglet est repris avant meme de savoir si ce cours en a un : le lire ici
-    // le pose en meme temps que le reste, et il ne sert a rien tant qu'aucun
-    // bandeau ne s'affiche.
-    setOcrView(readingSpot(courseId)?.view ?? 'ocr')
     setWarnings([])
     setError(null)
     setCurrentPage(1)
@@ -492,14 +423,7 @@ export default function CoursePanel({
         if (courseFormat === 'markdown') {
           const text = await window.noted.course.readMarkdown(courseId)
 
-          // Un cours reconstitue par OCR est un Markdown comme les autres, a
-          // deux commentaires pres. On les retire de ce qui est rendu et de ce
-          // qui part a l'indexation : l'en-tete n'est pas du cours, et les
-          // reperes de page ne doivent pas etre lus comme du texte.
-          const reconstitue = readOcrCourse(text)
-          if (!cancelled) setOcrCourse(reconstitue)
-
-          const body = withoutFrontMatter(reconstitue ? reconstitue.body : text)
+          const body = withoutFrontMatter(text)
 
           // L'affichage d'abord, la transmission ensuite — et sans `return`
           // entre les deux. L'ecran ne doit pas attendre l'indexation, et
@@ -511,26 +435,14 @@ export default function CoursePanel({
             setLoadedId(courseId)
           }
 
-          // Un cours deja reconstitue par OCR ne repasse jamais a la mesure :
-          // il est le resultat d'une conversion, pas un candidat a une autre.
-          if (reconstitue) {
-            await transmettre(unpaginated(courseId, body))
-            return
-          }
-
           // Les images du cours deviennent des marqueurs de figure, comme au
-          // chemin Word : c'est ce qui permet a la lecture par OCR de poser le
-          // texte de chaque image a sa place, et a la mesure de dire qu'un
-          // Markdown fait d'images est un document a convertir.
+          // chemin Word : le nom de chaque image voyage a cote du texte, a la
+          // meme position que son marqueur, pour qu'elle soit decrite apres la
+          // vectorisation.
           const figured = figuresFromMarkdown(body)
           const extracted: ExtractedCourse = {
             ...unpaginated(courseId, figured.text),
             ...(figured.media.length > 0 ? { media: figured.media } : {})
-          }
-
-          if (!cancelled) {
-            setScanned(extracted.looksScanned)
-            setFigureMedia(figured.media.filter(Boolean))
           }
 
           await transmettre(extracted)
@@ -558,14 +470,6 @@ export default function CoursePanel({
             media: mediaNames(clean)
           }
 
-          // Un Word fait d'images est un document a convertir, exactement
-          // comme un PDF scanne : la mesure est la meme, seule la source des
-          // pages change — ses images, puisqu'il n'a pas de pages a dessiner.
-          if (!cancelled) {
-            setScanned(extractedDocx.looksScanned)
-            setFigureMedia((extractedDocx.media ?? []).filter(Boolean))
-          }
-
           await transmettre(extractedDocx)
           return
         }
@@ -588,16 +492,11 @@ export default function CoursePanel({
           }
 
           // Meme contrat que le chemin Word : le texte part de ce que
-          // l'utilisateur a sous les yeux, et la liste des images permet a la
-          // lecture par OCR de rendre chaque schema a sa place.
+          // l'utilisateur a sous les yeux, et la liste des images permet de
+          // rendre chaque schema a sa place.
           const extractedPptx: ExtractedCourse = {
             ...unpaginated(courseId, htmlToContextText(cleanSlides)),
             media: mediaNames(cleanSlides)
-          }
-
-          if (!cancelled) {
-            setScanned(extractedPptx.looksScanned)
-            setFigureMedia((extractedPptx.media ?? []).filter(Boolean))
           }
 
           await transmettre(extractedPptx)
@@ -622,9 +521,9 @@ export default function CoursePanel({
             setWarnings(prepared.warnings)
           }
 
-          // Pas de lecture d'images ici : un graphique d'un cours HTML est du
+          // Aucune image a signaler ici : un graphique d'un cours HTML est du
           // code, et c'est ce code que le texte donne a lire. Un cours tres
-          // visuel, pauvre en texte, n'est donc pas un scan a convertir.
+          // visuel, pauvre en texte, n'est donc pas un scan.
           const extractedHtml: ExtractedCourse = {
             ...unpaginated(courseId, htmlCourseToContextText(prepared.html)),
             looksScanned: false
@@ -670,10 +569,7 @@ export default function CoursePanel({
           .readExtraction(courseId)
           .catch(() => null)
         if (cached) {
-          if (!cancelled) {
-            setPages(cached.pages)
-            setScanned(cached.looksScanned)
-          }
+          if (!cancelled) setPages(cached.pages)
           await transmettre(cached)
           return
         }
@@ -702,7 +598,6 @@ export default function CoursePanel({
           // Le texte reste ici aussi : c'est lui, et non le canvas, que ⌘F
           // interroge — une page peinte n'a pas de texte a chercher.
           setPages(extracted.pages)
-          setScanned(extracted.looksScanned)
           setExtraction(null)
         }
 
@@ -765,9 +660,8 @@ export default function CoursePanel({
    * Un PDF les a tout prets, un par page ; les autres formats partagent le meme
    * rendu HTML, et ce sont alors ses elements de premier niveau — un titre, un
    * paragraphe, une liste. Le choix est ici et pas dans reading-line.ts parce
-   * qu'il n'est pas devinable depuis le DOM : un cours reconstitue par lecture
-   * d'images a les deux rendus en meme temps, et seul le panneau sait lequel
-   * est a l'ecran.
+   * qu'il n'est pas devinable depuis le DOM : seul le panneau sait lequel des
+   * deux rendus il a mis a l'ecran.
    */
   const readingBlocks = useCallback((): HTMLElement[] => {
     const body = bodyRef.current
@@ -1063,15 +957,13 @@ export default function CoursePanel({
           page: Number(point?.element.dataset.page) || 1,
           section: null,
           progress: null,
-          passage: null,
-          figure: null
+          passage: null
         }
       : {
           page: null,
           section: htmlRoot ? sectionAtLine(htmlRoot, body) : null,
           progress: null,
-          passage: null,
-          figure: null
+          passage: null
         }
 
     // Un support ecrit d'un seul bloc n'a ni page ni titre : la fraction
@@ -1097,10 +989,10 @@ export default function CoursePanel({
     // HTML — n'ont pas d'equivalent : leur contenu est peint d'un bloc. On les
     // releve donc ici, au meme instant que la ligne de lecture, pour que les
     // deux informations parlent du meme moment de la lecture.
-    // Rien d'affiche du tout — l'original d'un cours reconstitue, un document
-    // qui n'a pas fini de charger — ne restreint rien : mieux vaut une liste
-    // vide, que l'ancrage lira comme « cherche partout », qu'une liste heritee
-    // du document precedent qui l'enverrait ailleurs avec assurance.
+    // Rien d'affiche du tout — un document qui n'a pas fini de charger — ne
+    // restreint rien : mieux vaut une liste vide, que l'ancrage lira comme
+    // « cherche partout », qu'une liste heritee du document precedent qui
+    // l'enverrait ailleurs avec assurance.
     if (!state) {
       const units = htmlRoot
         ? visibleSectionIndices(htmlRoot, body).map((index) => `section:${index}`)
@@ -1328,47 +1220,6 @@ export default function CoursePanel({
   )
 
   /**
-   * Rejoint la n-ieme image du document, et l'encadre.
-   *
-   * Le pendant de `goToPassage` pour un passage venu d'une capture d'ecran. Son
-   * texte a ete lu par le moteur d'OCR et verse dans l'index a la place du
-   * marqueur, mais le document, lui, a garde l'image : il n'y a pas un
-   * caractere a chercher, seulement un element a montrer.
-   *
-   * Le rang suffit a le retrouver parce que les deux listes sont construites du
-   * meme parcours : `media` est ecrit en parcourant les `img` du document
-   * converti, dans l'ordre, et c'est ce meme document qui est affiche. Le jour
-   * ou l'un des deux filtrerait une image que l'autre garde, tout ce qui suit
-   * se decalerait d'un cran — d'ou le soin pris, cote conversion, a laisser un
-   * nom vide plutot qu'a retirer une entree.
-   */
-  const goToFigure = useCallback(
-    (rank: number, signal: boolean): boolean => {
-      const body = bodyRef.current
-      if (!body || !htmlRoot) return false
-
-      const image = htmlRoot.querySelectorAll<HTMLImageElement>('img')[rank]
-      if (!image) return false
-
-      const rect = image.getBoundingClientRect()
-      const frame = body.getBoundingClientRect()
-      if (rect.top < frame.top || rect.bottom > frame.bottom) {
-        markDriven()
-        body.scrollTop += rect.top - readingLineY(body)
-      }
-
-      if (signal) {
-        setSpot([elementBox(body, image)])
-        if (spotTimer.current) clearTimeout(spotTimer.current)
-        spotTimer.current = setTimeout(() => setSpot([]), 3000)
-      }
-
-      return true
-    },
-    [htmlRoot, markDriven]
-  )
-
-  /**
    * Rejoint un passage precis du document affiche.
    *
    * `signal` distingue les deux demandeurs : la synchronisation des defilements
@@ -1410,11 +1261,6 @@ export default function CoursePanel({
     if (!goTo) return
     const body = bodyRef.current
     if (!body) return
-
-    // La figure d'abord : le texte d'un tel passage n'est nulle part dans le
-    // document, et le chercher reviendrait a parcourir tout le cours pour ne
-    // rien trouver.
-    if (goTo.anchor.figure !== null && goToFigure(goTo.anchor.figure, goTo.signal)) return
 
     if (goTo.anchor.passage && goToPassage(goTo.anchor.passage, goTo.anchor.page, goTo.signal))
       return
@@ -1956,51 +1802,6 @@ export default function CoursePanel({
         </div>
       )}
 
-      {/* Hors de la zone defilante, comme le message d'erreur : le bandeau doit
-          rester visible quand on parcourt le cours, sinon le retour a l'original
-          n'est accessible qu'en remontant tout en haut. */}
-      {(ocrCourse || conversion.running || conversion.asking > 0) && (
-        <OcrBanner
-          view={conversion.running ? 'original' : ocrView}
-          onChange={(next) => {
-            setOcrView(next)
-            if (courseId) rememberSpot(courseId, { view: next })
-          }}
-          original={ocrCourse?.document.original ?? course?.title ?? ''}
-          progress={conversion.running ? conversion : null}
-          asking={
-            conversion.asking > 0
-              ? {
-                  count: conversion.asking,
-                  accept: conversion.accept,
-                  decline: conversion.decline
-                }
-              : null
-          }
-        />
-      )}
-
-      {/* Un cours reconstitue auquel il manque des pages le dit, au meme
-          endroit que le bandeau : hors de la zone defilante, pour que la
-          reprise reste a portee de clic ou qu'on en soit dans le cours. */}
-      {ocrCourse?.document.missing && ocrCourse.document.missing.length > 0 && (
-        <div className="ocr-missing" role="status">
-          <span className="ocr-note">
-            {ocrCourse.document.missing.length === 1
-              ? `La page ${ocrCourse.document.missing[0]} n’a pas pu être lue`
-              : `${ocrCourse.document.missing.length} pages n’ont pas pu être lues`}
-            {ocrCourse.document.pageCount ? ` sur ${ocrCourse.document.pageCount}` : ''} — le
-            cours est incomplet.
-            {resume.error ? ` ${resume.error}` : ''}
-          </span>
-          <button className="ocr-choice ocr-choice--go" onClick={resume.start} disabled={resume.running}>
-            {resume.running
-              ? `Lecture — page ${resume.done} sur ${resume.total}`
-              : 'Poursuivre la lecture'}
-          </button>
-        </div>
-      )}
-
       <div
         className="panel-body course-body"
         ref={(element) => {
@@ -2018,11 +1819,7 @@ export default function CoursePanel({
           </div>
         )}
 
-        {ocrCourse && ocrView === 'original' && (
-          <OriginalView original={ocrCourse.document.original} width={pageWidth} />
-        )}
-
-        {documentHtml !== null && ocrView === 'ocr' && documentSkin !== null && (
+        {documentHtml !== null && documentSkin !== null && (
           /* Un cours HTML se dessine avec son propre style, pas celui du
              panneau : le conteneur tient lieu de page, et le zoom passe par la
              propriete CSS du meme nom — un artefact ecrit en pixels ne
@@ -2051,7 +1848,7 @@ export default function CoursePanel({
           </div>
         )}
 
-        {documentHtml !== null && ocrView === 'ocr' && documentSkin === null && (
+        {documentHtml !== null && documentSkin === null && (
           <article className="document-render" style={{ fontSize: `${zoom}em` }}>
             {warnings.length > 0 && (
               <p className="document-warning" title={warnings.join('\n')}>
@@ -2192,6 +1989,9 @@ function VectorDot({ status }: { status: VectorStatus | null }): React.JSX.Eleme
     affine: status.reason
       ? `Recherche par le sens active. Affinage interrompu : ${status.reason}`
       : `Recherche par le sens active · affinage des passages ${status.done}/${status.total}`,
+    // Le jaune vient apres le vert du sens : la recherche marche deja, ce qui
+    // reste n'ajoute que ce que les images du cours montrent.
+    images: `Recherche par le sens active · description des images ${status.done}/${status.total}`,
     complet: `Document entièrement traité · ${status.total} passages affinés`,
     // La raison donnee par le moteur passe en premier : c'est elle qui dit quoi
     // faire, quand le reste ne dit que l'endroit ou l'on s'est arrete.

@@ -32,12 +32,6 @@ export interface ReadingSpot {
    * loin, un contrat en corps 8 demande qu'on s'en approche.
    */
   zoom?: number
-  /**
-   * L'onglet choisi sur un cours reconstitue par lecture d'images. « Texte lu »
-   * au premier abord ; basculer sur l'original pour verifier un schema ne doit
-   * pas etre a refaire a chaque ouverture.
-   */
-  view?: 'ocr' | 'original'
 }
 
 function spotKey(courseId: string): string {

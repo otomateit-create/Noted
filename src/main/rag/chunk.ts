@@ -392,8 +392,8 @@ const SENTENCE_END = /[.!?:;][ »"')\]]*\s/g
  *
  * Le plafond et la reprise sont des arguments parce que le decoupage fin se
  * sert du meme repli avec un plafond bien plus bas : une « phrase » qu'`Intl
- * .Segmenter` n'a pas su terminer — un tableau, une enumeration sortie d'un
- * OCR — doit ceder au meme endroit, sur une ponctuation, et non a un compteur.
+ * .Segmenter` n'a pas su terminer — un tableau, une enumeration — doit ceder
+ * au meme endroit, sur une ponctuation, et non a un compteur.
  * Les valeurs par defaut sont celles du decoupage large : son appel n'a pas
  * bouge d'un caractere.
  */

@@ -542,9 +542,10 @@ export async function extractCourse(
   const characters = pages.reduce((total, page) => total + page.text.length, 0)
   const looksScanned = pageCount > 0 && characters / pageCount < SCANNED_THRESHOLD
 
-  // Les images du document, pour la lecture par OCR. Seulement quand le
-  // document est lisible : un scan part entier a la conversion (regime B), et
-  // extraire ses pages-images ici ferait lire deux fois le meme document.
+  // Les images du document : chacune est posee sur le disque et signalee par
+  // un marqueur dans le texte, pour etre decrite apres la vectorisation.
+  // Seulement quand le document est lisible : les pages d'un scan sont des
+  // images, et les extraire ici rendrait le document entier en doublon.
   let media: string[] | undefined
   if (!looksScanned) {
     const names: string[] = []

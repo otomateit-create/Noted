@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type {
-  Course,
-  CourseMove,
-  PendingConversion,
-  PhotoProposal,
-  Subject
-} from '@shared/types'
-import PhotoOrder from './PhotoOrder'
+import type { Course, CourseMove, Subject } from '@shared/types'
 import SubjectCreator from './SubjectCreator'
 import { readableError } from '../lib/errors'
 import '../styles/library.css'
@@ -73,11 +66,10 @@ export default function Library({
       event.preventDefault()
       // Une gestion en cours se referme d'abord : Echap defait le dernier geste,
       // il ne ferme pas tout d'un coup.
-      if (proposal) setProposal(null)
-      else if (managed) setManaged(null)
+      if (managed) setManaged(null)
       else onClose()
     }
-    if (managed || proposal) return
+    if (managed) return
 
     if (event.key === 'ArrowDown') {
       event.preventDefault()
@@ -94,45 +86,10 @@ export default function Library({
     }
   }
 
-  /**
-   * Les cours en train d'etre fabriques a partir de photos. Ils n'existent pas
-   * encore comme fichiers : ils s'affichent en tete de liste, avec leur
-   * avancement, et deviennent des cours ordinaires une fois lus.
-   */
-  const [pending, setPending] = useState<PendingConversion[]>([])
-
-  /**
-   * L'ordre propose pour des photos qu'on vient de choisir, tant qu'il n'est pas
-   * accepte. Rien n'a encore ete ecrit : abandonner ne laisse aucune trace.
-   */
-  const [proposal, setProposal] = useState<PhotoProposal | null>(null)
-
-  useEffect(() => {
-    const load = (): void => {
-      void window.noted.ocr.pending().then(setPending)
-    }
-    load()
-
-    const stop = window.noted.ocr.onPendingChanged(() => {
-      load()
-      // Une fabrication qui s'acheve fait apparaitre un vrai cours : la
-      // bibliotheque doit le voir sans qu'on la rouvre.
-      void onImported()
-    })
-    return stop
-  }, [onImported])
-
   const importInto = async (subject: string): Promise<void> => {
-    const { imported, photos } = await window.noted.vault.importCourses(subject)
+    const { imported } = await window.noted.vault.importCourses(subject)
     const refreshed = await onImported()
     const first = imported[0]
-
-    // Les images d'abord, quand il y en a : elles demandent un accord, et
-    // ouvrir un document par-dessus la question la ferait manquer.
-    if (photos) {
-      setProposal(photos)
-      return
-    }
 
     // Ouvrir directement le premier document importe : c'est ce qu'on veut
     // faire juste apres l'avoir ajoute.
@@ -160,17 +117,6 @@ export default function Library({
         onPointerDown={(event) => event.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
-        {proposal ? (
-          <PhotoOrder
-            proposal={proposal}
-            onCancel={() => setProposal(null)}
-            onConfirm={() => {
-              void window.noted.ocr.importPhotos(proposal)
-              setProposal(null)
-            }}
-          />
-        ) : (
-          <>
         <div className="library-search">
           <input
             ref={inputRef}
@@ -189,14 +135,6 @@ export default function Library({
               {query ? 'Aucun cours ne correspond.' : 'Aucun cours dans le vault.'}
             </p>
           )}
-
-          {pending.map((entry) => (
-            <PendingRow
-              key={entry.id}
-              entry={entry}
-              onDismiss={() => void window.noted.ocr.dismiss(entry.id)}
-            />
-          ))}
 
           {matches.map((course, index) => (
             <CourseRow
@@ -233,8 +171,6 @@ export default function Library({
             />
           </div>
         </footer>
-          </>
-        )}
       </div>
     </div>
   )
@@ -618,47 +554,6 @@ function InlineName({
         <span className="library-row-error">{error}</span>
       ) : (
         <span className="library-row-note">Entrée pour valider, échap pour annuler</span>
-      )}
-    </div>
-  )
-}
-
-
-/**
- * Un cours en train d'etre fabrique a partir de photos.
- *
- * Il occupe une ligne comme un cours ordinaire — c'est bien un cours qui
- * arrive — mais il ne s'ouvre pas : il n'existe pas encore. La ligne dit ou en
- * est la lecture, et disparait d'elle-meme quand le cours devient reel.
- */
-function PendingRow({
-  entry,
-  onDismiss
-}: {
-  entry: PendingConversion
-  onDismiss: () => void
-}): React.JSX.Element {
-  const failed = Boolean(entry.failed)
-
-  return (
-    <div className="library-row library-row--pending" data-failed={failed}>
-      <div className="library-row-main">
-        <span className="library-row-title">{entry.title}</span>
-        <span className="library-row-meta">
-          {entry.subject}
-          {' · '}
-          {failed
-            ? entry.failed
-            : `lecture des photos — ${entry.done} sur ${entry.total}`}
-        </span>
-      </div>
-
-      {failed ? (
-        <button className="library-row-cancel" onClick={onDismiss} title="Retirer cette ligne">
-          Retirer
-        </button>
-      ) : (
-        <span className="ocr-spinner" aria-hidden="true" />
       )}
     </div>
   )

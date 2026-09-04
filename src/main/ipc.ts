@@ -18,7 +18,6 @@ import type {
   CoursePreview,
   ExtractedCourse,
   ImportResult,
-  PhotoProposal,
   TutorSendInput
 } from '../shared/types'
 import { readAnnotations, writeAnnotations } from './annotations'
@@ -47,8 +46,9 @@ import {
   renameCourse,
   renameSubject
 } from './courses'
-import { convertDocxFile, readDocx } from './docx'
+import { readDocx } from './docx'
 import { readExtraction, saveExtraction } from './extraction-cache'
+import { numberFigures } from './figures/markers'
 import { readPreview, savePreview } from './preview-cache'
 import { bindMemoryBridge, cancelMemoryTrace } from './memory/bridge'
 import { removeEntry } from './memory/entries'
@@ -57,21 +57,7 @@ import { bindNotesBridge } from './notes-bridge'
 import { bindQuizBridge } from './quiz-bridge'
 import { isPromptId, listPromptSettings, setPromptSetting } from './prompts/catalog'
 import { readNote, writeNote, writeNoteBackup } from './notes'
-import { keepImage, mediaPath, readMedia } from './media'
-import { cachedRead, keepRead } from './ocr/cache'
-import { convertCourse, originalPath, patchCourse } from './ocr/convert'
-import { DECORATIVE_BYTES, readFigures } from './ocr/figures'
-import { isPhoto, PHOTO_EXTENSIONS, toPng } from './ocr/photos'
-import {
-  dismissConversion,
-  importPhotos,
-  proposePhotos,
-  pendingConversions,
-  watchPendingConversions
-} from './ocr/photo-import'
-import { yieldOcrToUser } from './ocr/engine'
-import { readPage } from './ocr/page'
-import { ensureOcrModel, imageFingerprint, ocrModelStatus, watchOcrModel } from './ocr/model'
+import { keepImage } from './media'
 import { anchorOrderKey, resolveAutoAnchor } from './rag/auto-anchor'
 import { failPreparation, prepareCourse, vectorStatus, watchVectorStatus } from './rag/store'
 import {
@@ -113,64 +99,31 @@ const EFFORTS: ChatEffort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 /** Formats qui deviennent un cours par simple copie, sans etre lus. */
 const IMPORTABLE = new Set(['.pdf', '.docx', '.pptx', '.md', '.markdown', '.html', '.htm'])
 
-/**
- * Tout ce que le selecteur laisse choisir, sans l'extension du point.
- *
- * Une seule entree, et non deux menus deroulants : celui qui importe a des
- * fichiers, pas des categories. Une capture d'ecran grisee dans le selecteur
- * ne dit pas « ce n'est pas un cours », elle dit « cette application ne marche
- * pas » — et c'est exactement ce qui s'est produit.
- */
-const CHOOSABLE = [...IMPORTABLE, ...PHOTO_EXTENSIONS].map((extension) => extension.slice(1))
-
-/**
- * Ce qu'un lot de fichiers contient, une fois departage.
- *
- * Les images ne sont pas des cours et ne peuvent pas etre copiees comme telles :
- * il faut les lire, ce qui prend des minutes et demande d'abord de confirmer
- * leur ordre. Elles suivent donc l'autre chemin — celui de `photo-import` —
- * pendant que les documents entrent tout de suite. Le reste est ecarte en
- * silence : un glisser-deposer ramasse ce qui passe, un dossier, une archive,
- * et le vault n'a pas a en etre jonche.
- */
-function sortSelection(paths: string[]): { documents: string[]; photos: string[] } {
-  const documents: string[] = []
-  const photos: string[] = []
-
-  for (const file of paths) {
-    if (typeof file !== 'string' || !file) continue
-    if (isPhoto(file)) photos.push(file)
-    else if (IMPORTABLE.has(path.extname(file).toLowerCase())) documents.push(file)
-  }
-
-  return { documents, photos }
-}
+/** Tout ce que le selecteur laisse choisir, sans l'extension du point. */
+const CHOOSABLE = [...IMPORTABLE].map((extension) => extension.slice(1))
 
 /**
  * Recoit un lot de fichiers deja designes, d'ou qu'ils viennent — selecteur ou
  * glisser-deposer.
  *
- * Les documents sont copies ici meme et leurs identifiants rendus. Les images,
- * elles, ne sont que **proposees** : rien n'est ecrit, l'ordre revient a
- * l'ecran, et c'est l'utilisateur qui lance la lecture ou l'abandonne.
+ * Ce qui n'est pas un format de cours est ecarte en silence : un
+ * glisser-deposer ramasse ce qui passe, un dossier, une archive, et le vault
+ * n'a pas a en etre jonche.
  */
 async function receiveFiles(
   paths: string[],
   subject: string,
   folder: string | null
 ): Promise<ImportResult> {
-  const { documents, photos } = sortSelection(paths)
-
   const imported: string[] = []
-  for (const file of documents) {
+
+  for (const file of paths) {
+    if (typeof file !== 'string' || !file) continue
+    if (!IMPORTABLE.has(path.extname(file).toLowerCase())) continue
     imported.push(await importCourseFile(file, subject, folder))
   }
 
-  // Les photos ne suivent pas le dossier de classement : leur import passe par
-  // une file d'attente qui se repere deja par un chemin `matiere/dossier`, ou
-  // « dossier » designe l'archive des originaux. Un cours lu depuis des photos
-  // arrive donc a la racine de la matiere, et se range ensuite comme un autre.
-  return { imported, photos: photos.length > 0 ? await proposePhotos(photos, subject) : null }
+  return { imported }
 }
 
 function expectString(value: unknown, label: string): string {
@@ -215,17 +168,16 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const target = expectString(subject, 'Matière')
     const into = optionalString(folder)
     const window = getWindow()
-    if (!window) return { imported: [], photos: null }
+    if (!window) return { imported: [] }
 
     const result = await dialog.showOpenDialog(window, {
       title: `Ajouter des cours dans ${into ? `${target} › ${into}` : target}`,
-      message:
-        'PDF, Word, PowerPoint, Markdown, HTML — ou des photos et captures d’écran, qui deviendront un seul cours.',
+      message: 'PDF, Word, PowerPoint, Markdown, HTML.',
       properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Cours, photos et captures d’écran', extensions: CHOOSABLE }]
+      filters: [{ name: 'Cours', extensions: CHOOSABLE }]
     })
 
-    if (result.canceled) return { imported: [], photos: null }
+    if (result.canceled) return { imported: [] }
 
     return receiveFiles(result.filePaths, target, into)
   })
@@ -254,30 +206,17 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   // --- Documents ---------------------------------------------------------
 
-  // Ces trois appels ont tous la meme cause : l'utilisateur vient d'ouvrir un
-  // cours. La lecture d'images s'efface donc devant eux — voir `yieldOcrToUser`,
-  // qui explique pourquoi ceder la place vaut mieux que baisser la priorite.
-  ipcMain.handle(CHANNELS.courseReadBytes, (_event, courseId: unknown) => {
-    yieldOcrToUser()
-    return readCourseBytes(expectString(courseId, 'Identifiant de cours'))
-  })
+  ipcMain.handle(CHANNELS.courseReadBytes, (_event, courseId: unknown) =>
+    readCourseBytes(expectString(courseId, 'Identifiant de cours'))
+  )
 
-  ipcMain.handle(CHANNELS.courseReadMarkdown, (_event, courseId: unknown) => {
-    yieldOcrToUser()
-    return fs.readFile(resolveCoursePath(expectString(courseId, 'Identifiant de cours')), 'utf8')
-  })
+  ipcMain.handle(CHANNELS.courseReadMarkdown, (_event, courseId: unknown) =>
+    fs.readFile(resolveCoursePath(expectString(courseId, 'Identifiant de cours')), 'utf8')
+  )
 
-  ipcMain.handle(CHANNELS.courseReadDocx, (_event, courseId: unknown) => {
-    yieldOcrToUser()
-    return readDocx(expectString(courseId, 'Identifiant de cours'))
-  })
-
-  // Une lecture de figures par cours a la fois. Rouvrir un document pendant
-  // que ses captures se lisent encore relancait un second passage complet, en
-  // parallele du premier : les memes images, pas encore en cache, etaient
-  // lues deux fois — vingt secondes chacune. Chainer les passages d'un meme
-  // cours suffit : le second repart du cache et ne coute plus rien.
-  const figuresRuns = new Map<string, Promise<void>>()
+  ipcMain.handle(CHANNELS.courseReadDocx, (_event, courseId: unknown) =>
+    readDocx(expectString(courseId, 'Identifiant de cours'))
+  )
 
   ipcMain.handle(CHANNELS.coursePreviewRead, (_event, courseId: unknown) =>
     readPreview(expectString(courseId, 'Identifiant de cours'))
@@ -292,38 +231,40 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     readExtraction(expectString(courseId, 'Identifiant de cours'))
   )
 
+  /**
+   * Le texte que le renderer vient d'extraire d'un cours : garde sur le disque,
+   * puis decoupe et vectorise tel quel, marqueurs `[figure]` compris.
+   *
+   * Rien ne s'interpose plus entre l'extraction et l'index : ce que les images
+   * disent sera decrit apres la vectorisation, et n'a donc pas a etre attendu
+   * ici. L'affichage, lui, n'attend rien de tout cela — il a eu lieu bien
+   * avant, dans le renderer.
+   */
   ipcMain.handle(CHANNELS.courseCacheExtraction, (_event, extracted: unknown) => {
-    const payload = extracted as ExtractedCourse
-    const courseId = expectString(payload?.courseId, 'Identifiant de cours')
+    const raw = extracted as ExtractedCourse
+    const courseId = expectString(raw?.courseId, 'Identifiant de cours')
 
-    // Le texte part sur le disque tel qu'il arrive, avant la lecture des
-    // figures : c'est ce que la prochaine ouverture voudra relire, et la lecture
-    // des images, elle, a son propre cache. Rien n'attend cette ecriture — un
-    // cache qui n'aboutit pas ne coute qu'une relecture.
+    // Chaque marqueur recoit son rang ici, et une bonne fois : c'est la seule
+    // etape qui voie le document entier. Plus loin, « lire » ne rend qu'une page
+    // ou une section, et un compteur repris a zero sur ce morceau poserait la
+    // description de la premiere image du cours sur la premiere figure de la
+    // page. Le rang inscrit dans le marqueur survit a tous les decoupages.
+    const payload = numberFigures(raw)
+
+    // Rien n'attend cette ecriture — un cache qui n'aboutit pas ne coute qu'une
+    // relecture.
     void saveExtraction(payload)
 
     // Le point rouge s'allume des maintenant, et non a la fin du decoupage :
-    // la lecture des figures et le decoupage qui suivent durent une demi-minute
-    // sur un gros cours, pendant laquelle rien ne disait que le document etait
-    // en train d'etre traite.
+    // celui-ci dure une demi-minute sur un gros cours, pendant laquelle rien ne
+    // disait que le document etait en train d'etre traite.
     prepareCourse(courseId)
 
-    // Les captures d'ecran sont lues **ici**, avant que le texte ne parte au
-    // decoupage et a la vectorisation. C'est le seul moment ou cela a un sens :
-    // apres, le texte tire d'une image n'aurait plus de passage ou entrer, donc
-    // ni ancre ni vecteur. L'affichage, lui, n'attend rien de tout cela — il a
-    // eu lieu bien avant, dans le renderer.
-    const previous = figuresRuns.get(courseId) ?? Promise.resolve()
-    const run = previous.then(async () => {
-      claudeSession.cacheExtraction(await readFigures(payload))
-    })
-
-    const chained = run.catch((cause: unknown) => failPreparation(courseId, cause))
-    figuresRuns.set(courseId, chained)
-    void chained.then(() => {
-      if (figuresRuns.get(courseId) === chained) figuresRuns.delete(courseId)
-    })
-    return run
+    try {
+      claudeSession.cacheExtraction(payload)
+    } catch (cause: unknown) {
+      failPreparation(courseId, cause)
+    }
   })
 
   // --- Gestion des cours -------------------------------------------------
@@ -609,137 +550,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     }
   })
 
-  // --- Lecture par OCR ---------------------------------------------------
-
-  ipcMain.handle(CHANNELS.ocrModelStatus, () => ocrModelStatus())
-
-  ipcMain.handle(CHANNELS.ocrInstall, () => ensureOcrModel())
-
-  ipcMain.handle(CHANNELS.ocrReadImage, async (_event, png: unknown) => {
-    if (!(png instanceof Uint8Array)) throw new Error('Image invalide')
-
-    // Le cache est interroge ici plutot que dans le moteur : c'est le seul
-    // endroit qui voit passer toutes les images, d'ou qu'elles viennent — une
-    // capture d'ecran d'un Word comme une page de PDF dessinee par le renderer.
-    const fingerprint = imageFingerprint(png)
-    const known = await cachedRead(fingerprint)
-    if (known) return known
-
-    // `keepFigures` : une page de PDF scanne ne laisse aucune autre trace de
-    // ses schemas — ils n'existent que dans l'image de la page.
-    const read = await readPage(Buffer.from(png), { keepFigures: true })
-    if (read) await keepRead(fingerprint, read)
-    return read
-  })
-
-  const cleanPages = (pages: unknown): { page: number; markdown: string }[] => {
-    if (!Array.isArray(pages)) throw new Error('Pages invalides')
-
-    return pages.flatMap((page) => {
-      if (!page || typeof page !== 'object') return []
-      const { page: number, markdown } = page as Record<string, unknown>
-      if (typeof number !== 'number' || typeof markdown !== 'string') return []
-
-      return [{ page: number, markdown }]
-    })
-  }
-
-  ipcMain.handle(
-    CHANNELS.ocrConvert,
-    async (_event, courseId: unknown, pages: unknown, report: unknown) => {
-      const id = expectString(courseId, 'Identifiant de cours')
-
-      // Le rapport de pages manquantes est repris tel quel s'il a la forme
-      // promise, ignore sinon : une conversion sans rapport reste une
-      // conversion complete.
-      let cleanedReport: { missing: number[]; pageCount: number } | undefined
-      if (report && typeof report === 'object') {
-        const { missing, pageCount } = report as Record<string, unknown>
-        if (
-          Array.isArray(missing) &&
-          missing.every((page) => typeof page === 'number' && Number.isInteger(page) && page > 0) &&
-          typeof pageCount === 'number' &&
-          Number.isInteger(pageCount)
-        ) {
-          cleanedReport = { missing, pageCount }
-        }
-      }
-
-      return convertCourse(id, cleanPages(pages), cleanedReport)
-    }
-  )
-
-  ipcMain.handle(CHANNELS.ocrPatch, (_event, courseId: unknown, pages: unknown) =>
-    patchCourse(expectString(courseId, 'Identifiant de cours'), cleanPages(pages))
-  )
-
-  ipcMain.handle(CHANNELS.ocrMediaPng, async (_event, name: unknown) => {
-    const file = mediaPath(expectString(name, 'Nom d’image'))
-    if (!file) return null
-
-    // Le meme ecart que pour les figures : une image trop petite pour porter
-    // du texte est une decoration, et la donner a lire couterait vingt
-    // secondes pour rendre une ligne vide.
-    const bytes = await readMedia(expectString(name, 'Nom d’image'))
-    if (!bytes || bytes.length < DECORATIVE_BYTES) return null
-
-    const png = await toPng(file)
-    return png ? new Uint8Array(png) : null
-  })
+  // --- Images ------------------------------------------------------------
 
   ipcMain.handle(CHANNELS.mediaKeep, (_event, bytes: unknown, contentType: unknown) => {
     if (!(bytes instanceof Uint8Array)) throw new Error('Image invalide')
     return keepImage(Buffer.from(bytes), expectString(contentType, 'Type d’image'))
-  })
-
-  ipcMain.handle(CHANNELS.ocrReadOriginal, async (_event, relative: unknown) => {
-    const buffer = await fs.readFile(originalPath(expectString(relative, 'Chemin de l’original')))
-    return new Uint8Array(buffer)
-  })
-
-  ipcMain.handle(CHANNELS.ocrReadOriginalDocx, (_event, relative: unknown) =>
-    convertDocxFile(originalPath(expectString(relative, 'Chemin de l’original')))
-  )
-
-  ipcMain.handle(CHANNELS.ocrListOriginal, async (_event, relative: unknown) => {
-    const target = originalPath(expectString(relative, 'Chemin de l’original'))
-
-    try {
-      const entries = await fs.readdir(target, { withFileTypes: true })
-      return entries
-        .filter((entry) => entry.isFile() && !entry.name.startsWith('.'))
-        .map((entry) => entry.name)
-        .sort()
-    } catch {
-      // Un fichier unique, et non un dossier : c'est le cas d'un PDF scanne.
-      return []
-    }
-  })
-
-  ipcMain.handle(CHANNELS.ocrImportPhotos, (_event, proposal: unknown) => {
-    // Sans attendre : la lecture dure des minutes, et la fenetre doit rendre la
-    // main tout de suite. C'est la ligne d'attente qui rend compte de la suite.
-    void importPhotos(proposal as PhotoProposal)
-  })
-
-  ipcMain.handle(CHANNELS.ocrPending, () => pendingConversions())
-
-  ipcMain.handle(CHANNELS.ocrDismiss, (_event, id: unknown) =>
-    dismissConversion(expectString(id, 'Identifiant'))
-  )
-
-  watchPendingConversions(() => {
-    const window = getWindow()
-    if (window && !window.isDestroyed()) {
-      window.webContents.send(CHANNELS.ocrPendingChanged)
-    }
-  })
-
-  watchOcrModel((status) => {
-    const window = getWindow()
-    if (window && !window.isDestroyed()) {
-      window.webContents.send(CHANNELS.ocrModelChanged, status)
-    }
   })
 
   // --- Claude ------------------------------------------------------------
