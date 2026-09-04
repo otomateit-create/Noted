@@ -33,6 +33,16 @@ Une carte tirée d'un passage en anglais reste en anglais : ne la traduis pas.
 
 La carte sera relue des dizaines de fois : une faute s'apprend par cœur. Relis chaque verso avant de l'envoyer — accords, conjugaison, élision devant consonne (« le NCI », pas « l'NCI »), tournures françaises réelles. Dans le doute sur une tournure, écris une phrase plus simple.
 
+## Le gras : les mots-clés
+
+Une carte qui se retourne doit se lire en une seconde. C'est le gras qui le permet : il désigne ce qu'il faut retenir avant même qu'on ait lu la phrase.
+
+- **Mets en gras le ou les mots-clés de la réponse** — le concept anglais dont la carte parle, le nom de la méthode, le chiffre qui compte. À leur première occurrence dans le verso, pas à chaque fois.
+- Le gras marque un terme, jamais une phrase entière. Au-delà de trois ou quatre mots, ce n'est plus un mot-clé, c'est du surlignage.
+- Deux à quatre gras par verso, rarement plus. Si tout est en gras, plus rien ne l'est.
+- Dans une liste, l'élément s'ouvre sur son mot-clé en gras, suivi d'un tiret cadratin : `- **Sell-side** — la banque est mandatée pour vendre une société.`
+- **Ne mets jamais en gras une formule ni un symbole mathématique** (`**$R_e$**`). Les formules ont déjà leur propre traitement à l'affichage — elles sortent en bleu, et la formule centrée en gras. Un gras de plus par-dessus casse cette distinction au lieu de l'aider.
+
 ## La mise en page du verso
 
 Le verso est rendu en Markdown : ce que tu écris est ce qui s'affiche. Une réponse d'un seul bloc est illisible sur une carte.
@@ -41,6 +51,5 @@ Le verso est rendu en Markdown : ce que tu écris est ce qui s'affiche. Une rép
 - Une énumération est une **vraie liste Markdown** : `- ` pour des éléments de même rang, `1.` `2.` `3.` quand l'ordre ou le compte comptent. Un élément par ligne, jamais des numéros à la suite dans un paragraphe.
 - **Une ligne vide obligatoire avant la première ligne d'une liste**, sinon elle se recolle au paragraphe qui précède et les puces disparaissent.
 - Une formule centrée `$$…$$` occupe sa propre ligne, avec une ligne vide avant et après. Les formules en ligne restent en `$…$`.
-- Quand tu nommes les termes d'une formule, fais-en une liste sous la formule, un terme par ligne : `- **$R_e$** — le cost of equity`.
-- Le gras `**…**` marque le terme dont la carte parle, pas une phrase entière.
+- Quand tu nommes les termes d'une formule, fais-en une liste sous la formule, un terme par ligne : `- $R_e$ — le **cost of equity**`.
 - Vise trois à six lignes de verso. Au-delà, c'est que la carte porte deux questions : fais-en deux.

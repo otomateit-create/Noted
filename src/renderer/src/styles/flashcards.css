@@ -1090,6 +1090,24 @@
   padding-bottom: 2px;
 }
 
+/* Une formule n'est pas une phrase : elle prend l'encre des surlignages
+   « Formule / chiffre », la meme que la pastille bleue d'une carte nee d'un
+   surlignage bleu. La couleur seule suffit a la designer. */
+.fc-markdown .katex {
+  color: var(--hl-formule);
+}
+
+/* La formule centree passe en plus au gras — c'est elle qu'on vient chercher
+   sur la carte. Les symboles en ligne gardent leur graisse : mis en gras, ils
+   entreraient en concurrence avec les termes deja en gras qui les commentent
+   dans la meme phrase (« $R_e$ — le **cost of equity** »), et deux graisses
+   pour deux sens differents effacent la hierarchie au lieu de la poser.
+   KaTeX embarque ses fontes grasses (KaTeX_Main-Bold, KaTeX_Math-BoldItalic) :
+   c'est un vrai dessin gras, pas une graisse synthetisee par le navigateur. */
+.fc-markdown .katex-display .katex {
+  font-weight: 700;
+}
+
 /* --- Les commandes sous la carte ------------------------------------------- */
 
 /* Hauteur reservee : retourner la carte ne fait pas sauter la mise en page. */
