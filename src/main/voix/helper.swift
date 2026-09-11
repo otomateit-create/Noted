@@ -201,10 +201,16 @@ final class Oreille {
     private(set) var ouverte = false
     /** Tampons recus du micro depuis l'ouverture — pour le diagnostic. */
     var tampons = 0
+    /** Le plus haut niveau livre a l'analyseur : un zero parfait trahit une conversion perdue. */
+    var niveau: Float = 0
 
-    /** Ou en est l'oreille : le moteur tourne-t-il, le micro livre-t-il ? */
+    /** Ou en est l'oreille : le moteur tourne-t-il, le micro livre-t-il, et du son y passe-t-il ? */
     func diagnostic() {
-        emettre(["ev": "diagnostic", "moteur": moteur.isRunning, "tampons": tampons, "ouverte": ouverte])
+        emettre([
+            "ev": "diagnostic", "moteur": moteur.isRunning, "tampons": tampons,
+            "ouverte": ouverte, "niveau": Double(niveau)
+        ])
+        niveau = 0
     }
 
     /**
@@ -257,11 +263,20 @@ final class Oreille {
                 Sortie.partagee.erreur("conversion audio impossible")
                 return
             }
+            // Le traitement vocal change la forme de l'entree : sept canaux au
+            // lieu d'un, en disposition « discrete » — des canaux sans role
+            // declare. Le convertisseur, lui, ne sait mixer vers le mono que
+            // des dispositions connues : devant celle-la il ne proteste pas,
+            // il rend des images de zeros, et l'analyseur ecoute un silence
+            // parfait sans que rien ne le dise. On lui designe donc le canal a
+            // prendre : le premier, celui de la voix traitee.
+            convertisseur.channelMap = [0]
 
             let (flux, continuation) = AsyncStream<AnalyzerInput>.makeStream()
             micro.installTap(onBus: 0, bufferSize: 4096, format: formatMicro) { [weak self] tampon, _ in
                 self?.tampons += 1
                 if let converti = Oreille.convertir(tampon, avec: convertisseur, vers: formatAnalyse) {
+                    self?.niveau = max(self?.niveau ?? 0, Oreille.crete(converti))
                     continuation.yield(AnalyzerInput(buffer: converti))
                 }
             }
@@ -330,6 +345,14 @@ final class Oreille {
         }
         if erreur != nil || sortie.frameLength == 0 { return nil }
         return sortie
+    }
+
+    /** Le plus fort echantillon d'un tampon, entre 0 et 1. */
+    static func crete(_ tampon: AVAudioPCMBuffer) -> Float {
+        guard let donnees = tampon.int16ChannelData, tampon.frameLength > 0 else { return 0 }
+        var maximum: Int32 = 0
+        for i in 0..<Int(tampon.frameLength) { maximum = max(maximum, abs(Int32(donnees[0][i]))) }
+        return Float(maximum) / 32768
     }
 
     /** Force l'analyseur a trancher ce qu'il tient encore pour volatil. */
