@@ -11,14 +11,15 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { CHANNELS } from '../shared/channels'
 import type {
-  NoteAnchor,
   Annotation,
   ChatEffort,
   ChatSendInput,
   CoursePreview,
   ExtractedCourse,
   ImportResult,
-  TutorSendInput
+  NoteAnchor,
+  TutorSendInput,
+  VoixEntree
 } from '../shared/types'
 import { readAnnotations, writeAnnotations } from './annotations'
 import { generationStatus, scheduleGeneration } from './flashcards/generation'
@@ -38,6 +39,7 @@ import { anchorBlocks } from './claude/tools'
 import { warmEmbedder } from './rag/embedder'
 import { supportedModels } from './claude/models'
 import { claudeStatus } from './claude/provider'
+import { entrerEnVoix, sessionVocale, sortirDeVoix } from './voix/session'
 import { tutorInterrupt, tutorReset, tutorSend } from './claude/tutor'
 import {
   deleteCourse,
@@ -626,6 +628,58 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   })
 
   // --- Parametres ---------------------------------------------------------
+
+  // --- Mode voix ---------------------------------------------------------
+
+  ipcMain.handle(CHANNELS.voixEntrer, (_event, input: unknown) => {
+    const payload = input as VoixEntree
+    const courseId = expectString(payload?.courseId, 'Identifiant de cours')
+    const model = typeof payload?.model === 'string' ? payload.model : undefined
+    const effort = EFFORTS.includes(payload?.effort as ChatEffort)
+      ? (payload.effort as ChatEffort)
+      : undefined
+    const reglages = payload?.reglages
+    const voix = typeof reglages?.voix === 'string' ? reglages.voix : undefined
+    const vitesse =
+      typeof reglages?.vitesse === 'number' && Number.isFinite(reglages.vitesse)
+        ? reglages.vitesse
+        : undefined
+
+    // La fenetre peut avoir ete fermee pendant que la session tourne.
+    const envoyer = (channel: string, contenu: unknown): void => {
+      const window = getWindow()
+      if (window && !window.isDestroyed()) window.webContents.send(channel, contenu)
+    }
+
+    return entrerEnVoix(
+      { courseId, model, effort, reglages: { voix, vitesse } },
+      {
+        etat: (etat) => envoyer(CHANNELS.voixEtat, etat),
+        tour: (tour) => envoyer(CHANNELS.voixTour, tour),
+        parole: (parole) => envoyer(CHANNELS.voixParole, parole),
+        // La reponse d'un tour parle suit le meme canal que celle d'un tour
+        // ecrit : c'est le meme fil, et le renderer la range de la meme facon.
+        flux: (event) => envoyer(CHANNELS.claudeStream, event)
+      }
+    )
+  })
+
+  ipcMain.handle(CHANNELS.voixSortir, () => sortirDeVoix())
+
+  ipcMain.handle(CHANNELS.voixChoisirVoix, (_event, id: unknown) => {
+    sessionVocale()?.choisirVoix(expectString(id, 'Voix'))
+  })
+
+  ipcMain.handle(CHANNELS.voixVitesse, (_event, valeur: unknown) => {
+    if (typeof valeur !== 'number' || !Number.isFinite(valeur)) throw new Error('Vitesse invalide')
+    sessionVocale()?.regler(Math.min(Math.max(valeur, 0.6), 1.6))
+  })
+
+  ipcMain.handle(CHANNELS.voixInjecter, (_event, chemin: unknown) => {
+    sessionVocale()?.injecter(expectString(chemin, 'Chemin'))
+  })
+
+  // --- Reglages ------------------------------------------------------------
 
   ipcMain.handle(CHANNELS.reglagesPrompts, () => listPromptSettings())
 

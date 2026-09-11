@@ -7,7 +7,8 @@ import type {
   ChatStreamEvent,
   MemoryTrace,
   QuizAnswer,
-  QuizForm
+  QuizForm,
+  VoixTour
 } from '@shared/types'
 import { formatQuotedPrompt } from '@shared/chat-quotes'
 
@@ -76,9 +77,24 @@ export function useChat(courseId: string | null) {
    */
   const messageOwner = useRef<Map<string, string>>(new Map())
 
+  /** Le fil qui contient un message deja termine, ou undefined. */
+  const threadsRef = useRef(threads)
+  threadsRef.current = threads
+  const ownerOf = (messageId: string): string | undefined => {
+    for (const [id, thread] of Object.entries(threadsRef.current)) {
+      if (thread.some((message) => message.id === messageId)) return id
+    }
+    return undefined
+  }
+
   useEffect(() => {
     const unsubscribe = window.noted.claude.onStream((event: ChatStreamEvent) => {
-      const target = messageOwner.current.get(event.messageId)
+      // La coupure vocale peut tomber apres la fin du tour — la voix parle
+      // bien plus lentement que le modele n'ecrit — quand la reponse n'est
+      // plus suivie ici : on la retrouve alors dans son fil.
+      const target =
+        messageOwner.current.get(event.messageId) ??
+        (event.kind === 'coupure' ? ownerOf(event.messageId) : undefined)
       if (!target) return
 
       setThreads((previous) => {
@@ -124,6 +140,9 @@ export function useChat(courseId: string | null) {
             message.streaming = false
             message.error = event.message
             break
+          case 'coupure':
+            message.cutAt = event.at
+            break
         }
 
         next[index] = message
@@ -136,6 +155,31 @@ export function useChat(courseId: string | null) {
       }
     })
 
+    return unsubscribe
+  }, [])
+
+  /**
+   * Un tour parle commence. La question a ete transcrite par le main, qui
+   * ouvre ici la paire question/reponse pour que le fil la montre comme un
+   * tour ordinaire ; la reponse suit par le flux habituel, sous le meme
+   * identifiant.
+   */
+  useEffect(() => {
+    const unsubscribe = window.noted.voix.onTour((tour: VoixTour) => {
+      const userMessage: ChatMessage = { id: `u-${tour.messageId}`, role: 'user', text: tour.texte }
+      const assistantMessage: ChatMessage = {
+        id: tour.messageId,
+        role: 'assistant',
+        text: '',
+        streaming: true
+      }
+      setThreads((previous) => ({
+        ...previous,
+        [tour.courseId]: [...(previous[tour.courseId] ?? []), userMessage, assistantMessage]
+      }))
+      messageOwner.current.set(tour.messageId, tour.courseId)
+      setBusy(true)
+    })
     return unsubscribe
   }, [])
 

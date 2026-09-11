@@ -12,7 +12,7 @@
  */
 
 import path from 'node:path'
-import type { Options, Query, SDKMessage, SessionMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { Options, Query, SDKMessage, SDKUserMessage, SessionMessage } from '@anthropic-ai/claude-agent-sdk'
 import { HIGHLIGHT_COLORS } from '../../shared/types'
 import type {
   ChatHistoryEntry,
@@ -654,6 +654,9 @@ function userTurn(content: string): Pick<ChatMessage, 'text' | 'quotes'> {
   return quotes.length > 0 ? { text: question, quotes } : { text: question }
 }
 
+/** Ce que le CLI ecrit a la place de la fin d'une reponse coupee par `interrupt()`. */
+const INTERRUPTED_MARKER = '[Request interrupted by user]'
+
 function convertHistory(raw: SessionMessage[]): ChatMessage[] {
   const result: ChatMessage[] = []
   let counter = 0
@@ -720,6 +723,14 @@ function convertHistory(raw: SessionMessage[]): ChatMessage[] {
             .map((block) => String(block['text'] ?? ''))
             .join('\n')
         )
+        // Le tour que le CLI ecrit quand une reponse est coupee par
+        // `interrupt()` — le mode voix le fait a chaque coupure. Ce n'est pas
+        // un message de l'utilisateur : un repere, comme la compaction.
+        if (turn.text.trim() === INTERRUPTED_MARKER) {
+          result.push({ id: nextId('h-i'), role: 'system', text: '', interrupted: true })
+          current = null
+          continue
+        }
         if (turn.text.trim()) {
           result.push({ id: nextId('h-u'), role: 'user', ...turn })
           current = null
@@ -809,6 +820,238 @@ export function reset(courseId: string): void {
   if (session) {
     session.sessionId = undefined
     session.turns = 0
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Conversation en flux : un processus qui reste, des tours qu'on enchaine
+// ---------------------------------------------------------------------------
+
+/**
+ * Une file asynchrone : ce qu'on y pousse ressort dans l'ordre chez celui qui
+ * itere, qui attend quand elle est vide ; `fermer` met fin a l'iteration une
+ * fois la file videe. Elle sert deux fois — pour les messages de l'utilisateur
+ * vers le moteur, et pour les messages du moteur vers le tour qui les lit.
+ */
+class FileAsync<T> implements AsyncIterable<T> {
+  private items: T[] = []
+  private attente: (() => void) | null = null
+  private fermee = false
+
+  pousser(item: T): void {
+    if (this.fermee) return
+    this.items.push(item)
+    this.reveiller()
+  }
+
+  fermer(): void {
+    this.fermee = true
+    this.reveiller()
+  }
+
+  private reveiller(): void {
+    const attente = this.attente
+    this.attente = null
+    attente?.()
+  }
+
+  async *[Symbol.asyncIterator](): AsyncIterator<T> {
+    for (;;) {
+      if (this.items.length > 0) {
+        yield this.items.shift() as T
+        continue
+      }
+      if (this.fermee) return
+      await new Promise<void>((resolve) => {
+        this.attente = resolve
+      })
+    }
+  }
+}
+
+/**
+ * La meme conversation qu'a l'ecrit, tenue autrement : le processus du moteur
+ * reste ouvert entre les tours, et une coupure passe par `interrupt()` au lieu
+ * de tuer le processus.
+ *
+ * La difference n'est pas un detail. Tuer le processus (ce que fait `send`
+ * par `interrupt`) ne laisse rien de la reponse coupee dans le transcript :
+ * au message suivant, le modele ne sait meme pas qu'il a parle. `interrupt()`
+ * garde le texte deja ecrit et y ajoute un repere « [Request interrupted by
+ * user] » : le modele cite ensuite sa derniere phrase mot pour mot. C'est ce
+ * que le mode voix exige — l'utilisateur coupe, puis demande « reviens sur ce
+ * que tu viens de dire ».
+ *
+ * Le processus reste aussi celui de la session en memoire (`session.active`) :
+ * tout ce qui arrete un tour ecrit — un message tape, une reprise
+ * d'historique, la suppression du cours — le ferme, et `onFermee` le dit au
+ * mode voix.
+ */
+export interface SessionFlux {
+  /** Envoie un message et pousse la reponse ; resout quand le tour est fini, ou coupe. */
+  poser(prompt: string, messageId: string, emit: (event: ChatStreamEvent) => void): Promise<void>
+  /** Coupe le tour en cours ; resout quand il est effectivement termine. */
+  couper(): Promise<void>
+  /** Vrai tant qu'un tour est en cours. */
+  readonly occupe: boolean
+  /** Ferme le processus. Un tour en cours est perdu : couper d'abord. */
+  fermer(): void
+}
+
+export async function ouvrirSessionFlux(
+  course: Course,
+  choice: Pick<ChatSendInput, 'model' | 'effort'>,
+  onFermee: () => void
+): Promise<SessionFlux> {
+  const courseId = course.id
+  const session = sessionFor(courseId)
+
+  // Un seul tour a la fois par cours : ce qui tournait a l'ecrit s'arrete.
+  interrupt(courseId)
+
+  const sdk = await loadSdk()
+  const options = await buildOptions(course, session, choice)
+  const abort = new AbortController()
+  options.abortController = abort
+
+  const entree = new FileAsync<SDKUserMessage>()
+  const stream = sdk.query({ prompt: entree, options })
+  session.active = { query: stream, abort }
+
+  let tourCourant: FileAsync<SDKMessage> | null = null
+  let tourPromesse: Promise<void> | null = null
+  let coupe = false
+  let fermee = false
+
+  // Le seul lecteur du flux : chaque message va au tour en cours, et le
+  // « result » qui le clot ferme sa file. Une fonction nommee plutot qu'une
+  // IIFE : TypeScript suit le flux de controle dans une IIFE, et y tiendrait
+  // `tourCourant` pour toujours nul.
+  const lire = async (): Promise<void> => {
+    try {
+      for await (const message of stream as AsyncIterable<SDKMessage>) {
+        tourCourant?.pousser(message)
+        if (message.type === 'result') {
+          tourCourant?.fermer()
+          tourCourant = null
+        }
+      }
+    } catch {
+      // Flux ferme de l'exterieur : le tour en cours, s'il y en a un, se termine.
+    } finally {
+      fermee = true
+      tourCourant?.fermer()
+      tourCourant = null
+      entree.fermer()
+      if (session.active?.abort === abort) session.active = undefined
+      onFermee()
+    }
+  }
+  void lire()
+
+  const poser = async (
+    prompt: string,
+    messageId: string,
+    emit: (event: ChatStreamEvent) => void
+  ): Promise<void> => {
+    if (fermee) {
+      emit({ kind: 'error', messageId, message: 'La conversation vocale est fermée.' })
+      return
+    }
+    // Un tour a la fois : le precedent finit — coupe ou non — avant que le
+    // suivant parte.
+    if (tourPromesse) await tourPromesse
+
+    const isNewSession = !session.sessionId
+    session.turns = isNewSession ? 1 : (session.turns ?? 0) + 1
+    const tour = new FileAsync<SDKMessage>()
+    tourCourant = tour
+    coupe = false
+
+    const promesse = (async () => {
+      try {
+        entree.pousser({
+          type: 'user',
+          message: {
+            role: 'user',
+            content: await withAppBlocks(prompt, course, isNewSession, session.turns ?? 1)
+          },
+          parent_tool_use_id: null,
+          session_id: session.sessionId ?? ''
+        })
+
+        await pumpTurn(
+          tour,
+          messageId,
+          (event) => {
+            // Un tour que nous avons coupe se clot en « error_during_execution »
+            // : ce n'est pas une erreur, c'est ce qu'on a demande.
+            if (event.kind === 'error' && coupe) return
+            emit(event)
+          },
+          (id) => {
+            session.sessionId = id
+          },
+          {
+            write: (draft) => showNoteDraft({ ...draft, courseId }),
+            end: (id) => endNoteDrafts(courseId, id)
+          }
+        )
+
+        if (isNewSession && session.sessionId) {
+          void sdk.tagSession(session.sessionId, courseId, {}).catch(() => undefined)
+        }
+        emit({ kind: 'done', messageId })
+      } catch (error) {
+        if (coupe || fermee) emit({ kind: 'done', messageId })
+        else emit({ kind: 'error', messageId, message: describeError(error) })
+      } finally {
+        endNoteDrafts(courseId, null)
+        if (tourCourant === tour) tourCourant = null
+        // Le brouillon oublie : meme regle qu'a l'ecrit (voir `send`), et
+        // meme exception sur coupure.
+        if (!coupe && !fermee) {
+          void postDraft(courseId).catch((cause) => {
+            console.warn(`[notes] pose du brouillon impossible pour ${courseId} :`, cause)
+          })
+        }
+      }
+    })()
+
+    tourPromesse = promesse
+    await promesse
+    if (tourPromesse === promesse) tourPromesse = null
+  }
+
+  const couper = async (): Promise<void> => {
+    const enCours = tourPromesse
+    if (!enCours || fermee) return
+    coupe = true
+    try {
+      await stream.interrupt()
+    } catch {
+      // Le tour venait de finir : plus rien a couper.
+    }
+    await enCours
+  }
+
+  const fermer = (): void => {
+    if (fermee) return
+    abort.abort()
+    try {
+      stream.close()
+    } catch {
+      // Deja ferme.
+    }
+  }
+
+  return {
+    poser,
+    couper,
+    get occupe() {
+      return tourPromesse !== null
+    },
+    fermer
   }
 }
 

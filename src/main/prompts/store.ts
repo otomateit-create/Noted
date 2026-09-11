@@ -6,12 +6,14 @@
  *     ~/Documents/Noted/Prompts/generateur.md
  *     ~/Documents/Noted/Prompts/memoire.md
  *     ~/Documents/Noted/Prompts/descripteur.md
+ *     ~/Documents/Noted/Prompts/voix.md
  *
- * Le dernier n'est pas un prompt systeme : c'est la methode que l'assistant
- * relit tous les huit echanges, quand l'application lui demande de tenir sa
- * memoire. Il vit ici parce qu'il se regle comme les autres, et qu'un texte
- * qui dit quoi retenir d'une conversation se retouche plus souvent qu'un
- * fichier de code.
+ * Les deux derniers ne sont pas des prompts systeme. memoire.md est la methode
+ * que l'assistant relit tous les huit echanges, quand l'application lui
+ * demande de tenir sa memoire ; voix.md est le style parle, joint a chaque
+ * message dicte en mode voix. Ils vivent ici parce qu'ils se reglent comme les
+ * autres, et qu'un texte qui dit quoi retenir d'une conversation, ou comment
+ * parler plutot qu'ecrire, se retouche plus souvent qu'un fichier de code.
  *
  * Ces fichiers sont la seule source de verite. Il n'y a pas de defaut du code
  * qui s'appliquerait par-dessous : ce qui est ecrit la est ce qui part au
@@ -33,6 +35,7 @@ import descripteurGraine from './graines/descripteur.md?raw'
 import generateurGraine from './graines/generateur.md?raw'
 import memoireGraine from './graines/memoire.md?raw'
 import tuteurGraine from './graines/tuteur.md?raw'
+import voixGraine from './graines/voix.md?raw'
 import {
   DEFAULT_TABLE_ACCENT,
   DEFAULT_TABLE_DESIGN,
@@ -48,7 +51,8 @@ export const PROMPT_IDS: readonly PromptId[] = [
   'tuteur',
   'generateur',
   'memoire',
-  'descripteur'
+  'descripteur',
+  'voix'
 ]
 
 /** Les textes livres avec l'application, inlines a la construction. */
@@ -57,7 +61,8 @@ const GRAINES: Record<PromptId, string> = {
   tuteur: tuteurGraine,
   generateur: generateurGraine,
   memoire: memoireGraine,
-  descripteur: descripteurGraine
+  descripteur: descripteurGraine,
+  voix: voixGraine
 }
 
 /** Le fichier d'un agent dans le vault. */

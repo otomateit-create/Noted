@@ -5,6 +5,7 @@ import { FEUX_REPOS, registerIpc } from './ipc'
 import { declareMediaScheme, serveMedia } from './media'
 import { buildMenu } from './menu'
 import { disposeAllSessions } from './claude/session'
+import { sortirDeVoix } from './voix/session'
 import { scanForGeneration } from './flashcards/generation'
 import { seedPrompts } from './prompts/store'
 import { disposeEmbedder, embedderBusy } from './rag/embedder'
@@ -136,7 +137,8 @@ process.on('unhandledRejection', (cause) => {
 app.on('before-quit', () => {
   // Chaque session Claude tient un sous-processus ouvert, et le calcul des
   // vecteurs un autre : il faut les fermer explicitement, sinon ils survivent
-  // a l'application.
+  // a l'application. Le helper vocal aussi, et lui tient le micro.
+  void sortirDeVoix()
   disposeAllSessions()
   disposeEmbedder()
 })

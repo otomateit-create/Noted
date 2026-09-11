@@ -34,6 +34,7 @@
     "asarUnpack": [
       "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
       "out/main/embed-worker.cjs",
+      "out/main/voix-helper",
       "node_modules/@huggingface/**/*",
       "node_modules/onnxruntime-node/**/*",
       "node_modules/onnxruntime-common/**/*",
@@ -57,7 +58,8 @@
       "icon": "build/icon.icns",
       "identity": "Noted Local",
       "extendInfo": {
-        "NSDocumentsFolderUsageDescription": "Noted range tes cours, tes notes et la memoire de l'IA dans le dossier Documents/Noted."
+        "NSDocumentsFolderUsageDescription": "Noted range tes cours, tes notes et la memoire de l'IA dans le dossier Documents/Noted.",
+        "NSMicrophoneUsageDescription": "Noted ecoute ta voix pour le mode oral de l'assistant. Le son est transcrit sur ton Mac et n'en sort jamais."
       }
     }
   },

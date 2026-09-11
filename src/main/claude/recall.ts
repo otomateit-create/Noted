@@ -156,7 +156,7 @@ export function memoireAnnexes(): PromptAnnexe[] {
 }
 
 /** Les blocs de l'application, tels qu'ils apparaissent dans un tour stocke. */
-const APP_BLOCKS = /\s*<(memoire-rappelee|rappel-application)>[\s\S]*?<\/\1>/g
+const APP_BLOCKS = /\s*<(memoire-rappelee|rappel-application|tour-parle|coupure)>[\s\S]*?<\/\1>/g
 
 /** Les mots de l'utilisateur seuls, sans ce que l'application y a joint. */
 export function userText(content: string): string {

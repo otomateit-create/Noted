@@ -823,6 +823,13 @@ export interface ChatMessage {
    * la correction qui suivra s'ecrit en dessous.
    */
   quizAt?: number
+  /**
+   * Mode voix : la reponse a ete coupee a la voix a cette position du texte.
+   * Ce qui suit a ete redige mais jamais prononce — il s'affiche estompe.
+   */
+  cutAt?: number
+  /** Repere « role: system » d'une reponse coupee, relu depuis le transcript. */
+  interrupted?: boolean
 }
 
 /** Une conversation passee, pour le picker d'historique du panneau. */
@@ -880,6 +887,8 @@ export type ChatStreamEvent =
   | { kind: 'tokens'; messageId: string; tokens: number }
   | { kind: 'done'; messageId: string }
   | { kind: 'error'; messageId: string; message: string }
+  /** Mode voix : l'utilisateur a coupe la parole ; `at` borne, dans le texte, ce qu'il a entendu. */
+  | { kind: 'coupure'; messageId: string; at: number }
 
 // ---------------------------------------------------------------------------
 // Etat de l'authentification Claude
@@ -962,7 +971,7 @@ export interface TutorSendInput {
  * texte : c'est l'identifiant qui fait le lien entre le fichier de reglages,
  * le code qui construit l'appel et la ligne affichee a l'ecran.
  */
-export type PromptId = 'assistant' | 'tuteur' | 'generateur' | 'memoire' | 'descripteur'
+export type PromptId = 'assistant' | 'tuteur' | 'generateur' | 'memoire' | 'descripteur' | 'voix'
 
 /**
  * Un bloc que l'application ajoute d'elle-meme autour du prompt d'un agent.
@@ -999,6 +1008,68 @@ export interface PromptSetting {
    */
   annexes: PromptAnnexe[]
 }
+
+// ---------------------------------------------------------------------------
+// Mode voix
+// ---------------------------------------------------------------------------
+
+/**
+ * Ou en est la session vocale. `ferme` : pas de session ; `ouverture` : le
+ * micro et la conversation s'ouvrent ; `repos` : il attend qu'on lui parle ;
+ * `ecoute` : quelqu'un parle ; `reflexion` : la question est partie, la voix
+ * n'a pas encore commence ; `parole` : la voix lit la reponse.
+ */
+export type VoixPhase = 'ferme' | 'ouverture' | 'repos' | 'ecoute' | 'reflexion' | 'parole'
+
+export interface VoixDisponible {
+  id: string
+  nom: string
+  langue: string
+  /** 1 compact, 2 amelioree, 3 premium — les deux dernieres se telechargent dans Reglages Systeme. */
+  qualite: number
+}
+
+export interface VoixEtat {
+  phase: VoixPhase
+  /** Ce que le micro a compris jusqu'ici de la question en cours. */
+  transcription?: string
+  /** Ce que l'assistant fait pendant qu'il reflechit : « Recherche dans le cours… ». */
+  detail?: string
+  /** Pourquoi la session s'est fermee, ou ce qui ne va pas. */
+  erreur?: string
+  /** Les voix francaises du systeme, et celle en usage. */
+  voix?: VoixDisponible[]
+  voixChoisie?: string
+}
+
+/** Un tour parle qui commence : la question transcrite, et la reponse a venir. */
+export interface VoixTour {
+  courseId: string
+  messageId: string
+  texte: string
+}
+
+/** La phrase que la voix lit, et jusqu'ou elle en est (fin du dernier mot commence). */
+export interface VoixParole {
+  messageId: string
+  phrase: string
+  jusqua: number
+}
+
+export interface VoixReglages {
+  voix?: string
+  /** Multiplicateur de la vitesse de lecture ; 1 = la vitesse normale de la voix. */
+  vitesse?: number
+}
+
+export interface VoixEntree {
+  courseId: string
+  model?: string
+  effort?: ChatEffort
+  reglages?: VoixReglages
+}
+
+export type VoixOuverture = { ok: true } | { ok: false; raison: string }
 
 export interface NotedApi {
   vault: {
@@ -1248,6 +1319,19 @@ export interface NotedApi {
     cancel(traceId: string): Promise<MemoryTrace | null>
     /** Previent qu'une ecriture vient d'avoir lieu, pour afficher sa trace. */
     onTrace(handler: (trace: MemoryTrace) => void): () => void
+  }
+  voix: {
+    /** Ouvre le mode voix sur un cours : micro, helper natif, conversation en flux. */
+    entrer(input: VoixEntree): Promise<VoixOuverture>
+    /** Ferme le mode voix ; la conversation ecrite reprend la meme session. */
+    sortir(): Promise<void>
+    choisirVoix(id: string): Promise<void>
+    vitesse(valeur: number): Promise<void>
+    /** Verse un fichier audio dans le micro — pour les tests, faute de voix humaine. */
+    injecter(chemin: string): Promise<void>
+    onEtat(handler: (etat: VoixEtat) => void): () => void
+    onTour(handler: (tour: VoixTour) => void): () => void
+    onParole(handler: (parole: VoixParole) => void): () => void
   }
   reglages: {
     /** Les prompts des agents : leur defaut, leur texte en vigueur. */

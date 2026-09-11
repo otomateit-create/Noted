@@ -88,6 +88,20 @@ export const CHANNELS = {
   /** Sens main -> renderer : deltas de la reponse en cours. */
   claudeStream: 'claude:stream',
 
+  /** Mode voix : ouvre la session vocale d'un cours. */
+  voixEntrer: 'voix:entrer',
+  voixSortir: 'voix:sortir',
+  voixChoisirVoix: 'voix:choisir-voix',
+  voixVitesse: 'voix:vitesse',
+  /** Verse un fichier audio dans le micro — tests seulement. */
+  voixInjecter: 'voix:injecter',
+  /** Sens main -> renderer : ou en est la session vocale. */
+  voixEtat: 'voix:etat',
+  /** Sens main -> renderer : un tour parle commence, avec la question transcrite. */
+  voixTour: 'voix:tour',
+  /** Sens main -> renderer : la phrase lue et le mot ou en est la voix. */
+  voixParole: 'voix:parole',
+
   /** Depose une image dans le dossier media et rend son nom. */
   mediaKeep: 'media:keep',
 

@@ -14,8 +14,12 @@ import type {
 } from '@shared/types'
 import { QUIZ_CORRECTION_BRIEF, formatQuizCopy } from '@shared/quiz-copy'
 import PanelLabel from './PanelLabel'
+import Picker from './Picker'
 import QuizCard from './QuizCard'
+import VoiceConsole from './VoiceConsole'
 import { QUIZ_TOOL, useChat } from '../hooks/useChat'
+import { usePersisted } from '../hooks/usePersisted'
+import { useVoice } from '../hooks/useVoice'
 import { useSmoothText } from '../hooks/useSmoothText'
 import { protectMath, restoreMath } from '../lib/math'
 import '../styles/chat.css'
@@ -41,25 +45,6 @@ const EFFORT_LEVELS: Array<{ value: ChatEffort; label: string; description: stri
  * revient a ne rien imposer.
  */
 const DEFAULT_MODEL = 'default'
-
-/**
- * Un choix qui survit au redemarrage. Le reglage est un confort d'usage, pas une
- * donnee de travail : il vit dans le navigateur, pas dans le vault.
- */
-function usePersisted(key: string, fallback: string): [string, (value: string) => void] {
-  const [value, setValue] = useState(() => window.localStorage.getItem(key) ?? fallback)
-
-  const update = useCallback(
-    (next: string) => {
-      setValue(next)
-      if (next) window.localStorage.setItem(key, next)
-      else window.localStorage.removeItem(key)
-    },
-    [key]
-  )
-
-  return [value, update]
-}
 
 /**
  * Les amorces qui defilent dans la barre tant qu'elle est vide. Un champ muet
@@ -573,6 +558,12 @@ export default function ChatPanel({
     [chosenModel, effort, models]
   )
 
+  /**
+   * Le mode voix : la meme conversation, parlee. Le main tient le micro et la
+   * voix ; ici on ne fait qu'ouvrir, fermer, et montrer ou il en est.
+   */
+  const voice = useVoice(course?.id ?? null, choice)
+
   const submit = useCallback(() => {
     if (!draft.trim() || busy) return
     // Le rang est fixe ici, a l'envoi : retirer la citation 2 renumerote les
@@ -917,6 +908,21 @@ export default function ChatPanel({
             Auto
           </button>
 
+          <button
+            className="icon-button"
+            data-active={voice.active}
+            onClick={voice.active ? voice.leave : () => void voice.enter()}
+            disabled={!course || !status?.ready || voice.opening}
+            title={
+              voice.active
+                ? "Revenir à l'écrit : le micro se ferme, la conversation continue au clavier"
+                : "Parler à l'assistant : le micro s'ouvre, il répond à voix haute, et tu le coupes en parlant. C'est la même conversation."
+            }
+            aria-pressed={voice.active}
+          >
+            {voice.opening ? 'Voix…' : 'Voix'}
+          </button>
+
           <HistoryPicker
             disabled={!course}
             loadHistory={history}
@@ -1009,6 +1015,24 @@ export default function ChatPanel({
         </button>
       )}
 
+      {!voice.active && !voice.opening && voice.etat.phase === 'ferme' && voice.etat.erreur && (
+        <div className="voice-notice" role="alert">
+          {voice.etat.erreur}
+        </div>
+      )}
+
+      {voice.active || voice.opening ? (
+        <VoiceConsole
+          etat={voice.etat}
+          parole={voice.parole}
+          opening={voice.opening}
+          voix={voice.voix}
+          vitesse={voice.vitesse}
+          onVoice={voice.chooseVoice}
+          onRate={voice.setRate}
+          onLeave={voice.leave}
+        />
+      ) : (
       <div className="composer">
         {quotes.length > 0 && (
           <div className="composer-quotes">
@@ -1097,6 +1121,7 @@ export default function ChatPanel({
           {busy && <span className="composer-hint">Claude répond…</span>}
         </div>
       </div>
+      )}
     </section>
   )
 }
@@ -1139,95 +1164,6 @@ function availableLevels(models: ChatModel[], value: string): typeof EFFORT_LEVE
 
 function supportsEffort(models: ChatModel[], value: string): boolean {
   return availableLevels(models, value).length > 0
-}
-
-interface PickerOption {
-  value: string
-  label: string
-  description: string
-}
-
-/**
- * Petit selecteur de la barre de chat. Il s'ouvre vers le haut : le composeur
- * est colle au bas du panneau, un menu vers le bas sortirait de la fenetre.
- */
-function Picker({
-  label,
-  title,
-  options,
-  selected,
-  onSelect,
-  disabled
-}: {
-  label: string
-  title: string
-  options: PickerOption[]
-  selected: string
-  onSelect: (value: string) => void
-  disabled?: boolean
-}): React.JSX.Element {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-
-    const onPointerDown = (event: PointerEvent): void => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false)
-    }
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
-
-  return (
-    <div className="composer-picker" ref={ref}>
-      <button
-        className="composer-chip"
-        data-active={open}
-        onClick={() => setOpen((value) => !value)}
-        disabled={disabled}
-        title={`${title} : ${label}`}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-      >
-        <span className="composer-chip-label">{label}</span>
-        <span className="composer-chip-caret" aria-hidden="true">
-          ⌃
-        </span>
-      </button>
-
-      {open && (
-        <div className="composer-menu" role="listbox">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              className="composer-menu-item"
-              role="option"
-              aria-selected={option.value === selected}
-              data-selected={option.value === selected}
-              onClick={() => {
-                onSelect(option.value)
-                setOpen(false)
-              }}
-            >
-              <span className="composer-menu-label">{option.label}</span>
-              {option.description && (
-                <span className="composer-menu-description">{option.description}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
 }
 
 /**
@@ -1487,12 +1423,30 @@ function Message({
    */
   const orphaned = Boolean(message.quiz) && !message.streaming && !message.quizAnswers
 
+  /**
+   * Mode voix : ce qui a ete entendu s'arrete a `cutAt`. La suite, redigee
+   * mais jamais prononcee, se rend a part, estompee, sous un repere — pour
+   * que le fil dise la meme chose que ce que l'assistant sait avoir dit.
+   */
+  const cutAt = message.cutAt !== undefined && quizAt === null ? message.cutAt : null
+
   const html = useMemo(
     () =>
       message.role === 'assistant'
-        ? renderAnswer(quizAt === null ? visible : visible.slice(0, quizAt))
+        ? renderAnswer(
+            quizAt !== null
+              ? visible.slice(0, quizAt)
+              : cutAt !== null
+                ? visible.slice(0, cutAt)
+                : visible
+          )
         : null,
-    [message.role, visible, quizAt]
+    [message.role, visible, quizAt, cutAt]
+  )
+
+  const htmlUnheard = useMemo(
+    () => (cutAt !== null && visible.length > cutAt ? renderAnswer(visible.slice(cutAt)) : null),
+    [visible, cutAt]
   )
 
   /** Ce qui s'ecrit apres la carte : la correction de la copie. */
@@ -1515,6 +1469,10 @@ function Message({
    */
   const inner = useMemo(() => (html ? { __html: html } : null), [html])
   const innerAfter = useMemo(() => (htmlAfter ? { __html: htmlAfter } : null), [htmlAfter])
+  const innerUnheard = useMemo(
+    () => (htmlUnheard ? { __html: htmlUnheard } : null),
+    [htmlUnheard]
+  )
 
   /**
    * Accuse de reception de l'insertion. Le geste agit dans un autre panneau :
@@ -1532,7 +1490,9 @@ function Message({
       <div className="message message--system" data-tone={message.error ? 'error' : undefined}>
         <span className="message-system-line" aria-hidden="true" />
         <span className="message-system-text">
-          {message.error
+          {message.interrupted
+            ? 'Réponse coupée'
+            : message.error
             ? `Compaction impossible — ${message.error}`
             : typeof message.compactedTokens === 'number' && message.compactedTokens > 0
               ? `Conversation compactee · ${formatDroppedTokens(message.compactedTokens)} liberes`
@@ -1621,6 +1581,18 @@ function Message({
           onClick={onClick}
           dangerouslySetInnerHTML={innerAfter}
         />
+      )}
+
+      {innerUnheard && (
+        <div className="message-unheard">
+          <span className="message-unheard-label">Coupé ici — la suite n'a pas été prononcée</span>
+          <div
+            className="message-text message-markdown"
+            data-message-id={message.id}
+            onClick={onClick}
+            dangerouslySetInnerHTML={innerUnheard}
+          />
+        </div>
       )}
 
       {!message.streaming && !message.error && message.text.trim() && (

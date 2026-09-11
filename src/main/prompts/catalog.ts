@@ -19,6 +19,7 @@ import { memoireAnnexes } from '../claude/recall'
 import { tutorAnnexes } from '../claude/tutor'
 import { generationAnnexes } from '../flashcards/generation'
 import { descriptionAnnexes } from '../figures/describe'
+import { voixAnnexes } from '../voix/blocs'
 import { promptPath, PROMPT_IDS, readPrompt, shippedPrompt, writePrompt } from './store'
 
 interface Descriptor {
@@ -62,6 +63,12 @@ const CATALOG: Record<PromptId, Descriptor> = {
     description:
       "En tâche de fond, sans rien afficher : une fois le cours vectorisé, il regarde chaque image du document — schéma, graphique, tableau mis en image — et écrit ce qu'elle montre. L'assistant lit ces descriptions dans « lire », à la place des marqueurs de figure, et ouvre l'image elle-même quand un détail compte.",
     annexes: descriptionAnnexes
+  },
+  voix: {
+    label: 'Le style parlé',
+    description:
+      "Joint à chaque message dicté en mode voix : comment parler plutôt qu'écrire — phrases courtes, formules en toutes lettres, aucune mise en forme. Le prompt de l'assistant ne change pas ; ce bloc s'y ajoute, et seulement à l'oral.",
+    annexes: voixAnnexes
   }
 }
 

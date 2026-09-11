@@ -1,5 +1,6 @@
 import { copyFileSync, mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { construireVoix } from './scripts/construire-voix.mjs'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -21,6 +22,9 @@ function copyWorkers(): Plugin {
       for (const from of ['src/main/rag/embed-worker.cjs']) {
         copyFileSync(resolve(from), resolve('out/main', from.split('/').pop() as string))
       }
+      // L'oreille et la bouche du mode voix : un binaire natif, compile par
+      // swiftc a cote du bundle, pour les memes raisons que le worker.
+      construireVoix()
     }
   }
 }

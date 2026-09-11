@@ -45,7 +45,12 @@ import type {
   Subject,
   TutorSendInput,
   VaultPaths,
-  VectorStatus
+  VectorStatus,
+  VoixEntree,
+  VoixEtat,
+  VoixOuverture,
+  VoixParole,
+  VoixTour
 } from '../shared/types'
 
 const api: NotedApi = {
@@ -335,6 +340,36 @@ const api: NotedApi = {
       ipcRenderer.on(CHANNELS.memoireTrace, listener)
       return () => {
         ipcRenderer.removeListener(CHANNELS.memoireTrace, listener)
+      }
+    }
+  },
+
+  voix: {
+    entrer: (input: VoixEntree): Promise<VoixOuverture> =>
+      ipcRenderer.invoke(CHANNELS.voixEntrer, input),
+    sortir: (): Promise<void> => ipcRenderer.invoke(CHANNELS.voixSortir),
+    choisirVoix: (id: string): Promise<void> => ipcRenderer.invoke(CHANNELS.voixChoisirVoix, id),
+    vitesse: (valeur: number): Promise<void> => ipcRenderer.invoke(CHANNELS.voixVitesse, valeur),
+    injecter: (chemin: string): Promise<void> => ipcRenderer.invoke(CHANNELS.voixInjecter, chemin),
+    onEtat: (handler: (etat: VoixEtat) => void): (() => void) => {
+      const listener = (_event: unknown, payload: VoixEtat): void => handler(payload)
+      ipcRenderer.on(CHANNELS.voixEtat, listener)
+      return () => {
+        ipcRenderer.removeListener(CHANNELS.voixEtat, listener)
+      }
+    },
+    onTour: (handler: (tour: VoixTour) => void): (() => void) => {
+      const listener = (_event: unknown, payload: VoixTour): void => handler(payload)
+      ipcRenderer.on(CHANNELS.voixTour, listener)
+      return () => {
+        ipcRenderer.removeListener(CHANNELS.voixTour, listener)
+      }
+    },
+    onParole: (handler: (parole: VoixParole) => void): (() => void) => {
+      const listener = (_event: unknown, payload: VoixParole): void => handler(payload)
+      ipcRenderer.on(CHANNELS.voixParole, listener)
+      return () => {
+        ipcRenderer.removeListener(CHANNELS.voixParole, listener)
       }
     }
   },
