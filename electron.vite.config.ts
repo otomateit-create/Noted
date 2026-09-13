@@ -19,11 +19,11 @@ function copyWorkers(): Plugin {
     name: 'noted-copy-workers',
     closeBundle() {
       mkdirSync(resolve('out/main'), { recursive: true })
-      for (const from of ['src/main/rag/embed-worker.cjs']) {
+      for (const from of ['src/main/rag/embed-worker.cjs', 'src/main/voix/kokoro-worker.cjs']) {
         copyFileSync(resolve(from), resolve('out/main', from.split('/').pop() as string))
       }
-      // L'oreille et la bouche du mode voix : un binaire natif, compile par
-      // swiftc a cote du bundle, pour les memes raisons que le worker.
+      // L'oreille du mode voix, et le lecteur qui joue ce que le modele de
+      // voix fabrique : un binaire natif, compile par swiftc a cote du bundle.
       construireVoix()
     }
   }

@@ -40,6 +40,7 @@ import { findCourse } from '../vault'
 import { blocCoupure, blocTourParle } from './blocs'
 import type { Coupure } from './blocs'
 import { HelperVoix } from './helper'
+import { VOIX, VOIX_PAR_DEFAUT, endormir, reveiller, synthetiser } from './kokoro'
 import type { EvenementVoix } from './helper'
 import { Decoupeur, compterMots, pourLaVoix } from './parole'
 import type { Phrase } from './parole'
@@ -108,6 +109,12 @@ interface TourParle {
   /** Tout a ete dit, ou coupe. */
   fini: boolean
   coupe: boolean
+  /**
+   * Les phrases partent a la synthese l'une apres l'autre : le moteur n'en
+   * calcule qu'une a la fois, et l'ordre de la reponse doit etre celui de la
+   * lecture.
+   */
+  file: Promise<void>
 }
 
 let courante: SessionVocale | null = null
@@ -152,8 +159,9 @@ export class SessionVocale {
   private phase: VoixPhase = 'ouverture'
   private helper: HelperVoix | null = null
   private flux: SessionFlux | null = null
-  private voix: VoixDisponible[] = []
-  private voixChoisie = ''
+  private voix: VoixDisponible[] = VOIX
+  private voixChoisie = VOIX_PAR_DEFAUT
+  private vitesse = 1
   private detail: string | undefined
   private erreur: string | undefined
   private fermee = false
@@ -184,10 +192,22 @@ export class SessionVocale {
     const refus = await autoriserMicro()
     if (refus) return { ok: false, raison: refus }
 
-    // Le helper et la conversation s'ouvrent ensemble : la seconde prend une
-    // ou deux secondes (le moteur se lance et reprend la session), le premier
-    // autant (le micro, puis la voix a chauffer).
+    // Un reglage garde d'une version precedente peut nommer une voix du
+    // systeme, qui n'existe plus ici : on ne retient que ce qu'on sait dire.
+    if (VOIX.some((voix) => voix.id === this.entree.reglages?.voix)) {
+      this.voixChoisie = this.entree.reglages?.voix as string
+    }
+    if (this.entree.reglages?.vitesse) this.vitesse = this.entree.reglages.vitesse
+
+    // Le helper, la conversation et le modele de voix s'ouvrent ensemble : le
+    // micro prend une seconde, la conversation deux, et le modele se charge
+    // pendant ce temps pour que la premiere phrase parte sans attendre.
     const helperPret = this.lancerHelper()
+    void reveiller(this.voixChoisie).catch((erreur) => {
+      if (this.fermee) return
+      this.erreur = describeError(erreur)
+      this.emettreEtat()
+    })
 
     let flux: SessionFlux
     try {
@@ -245,12 +265,16 @@ export class SessionVocale {
 
   choisirVoix(id: string): void {
     this.voixChoisie = id
-    this.helper?.envoyer({ cmd: 'voix', id })
     this.emettreEtat()
+    // Le timbre se telecharge au premier usage : autant le faire maintenant,
+    // pendant qu'on lit, plutot qu'au milieu d'une reponse.
+    void reveiller(id).catch(() => {
+      // Le prochain tour de parole le redira, avec son message.
+    })
   }
 
   regler(vitesse: number): void {
-    this.helper?.envoyer({ cmd: 'vitesse', valeur: vitesse })
+    this.vitesse = vitesse
   }
 
   /** Un fichier audio verse dans le micro — pour les tests, faute de voix humaine. */
@@ -282,6 +306,9 @@ export class SessionVocale {
     }
     helper?.envoyer({ cmd: 'taire' })
     helper?.arreter()
+    // Le modele rend ses cinq cents megaoctets tout de suite : on sort du mode
+    // voix, il n'a plus rien a dire.
+    endormir()
 
     this.phase = 'ferme'
     this.erreur = raison
@@ -301,10 +328,6 @@ export class SessionVocale {
           this.attenteMicro?.('La transcription hors ligne demande macOS 26.')
           return
         }
-        this.helper?.envoyer({ cmd: 'voix-liste' })
-        if (this.entree.reglages?.voix) this.helper?.envoyer({ cmd: 'voix', id: this.entree.reglages.voix })
-        if (this.entree.reglages?.vitesse) this.helper?.envoyer({ cmd: 'vitesse', valeur: this.entree.reglages.vitesse })
-        this.helper?.envoyer({ cmd: 'chauffer' })
         this.helper?.envoyer({ cmd: 'ecouter' })
         return
       case 'micro':
@@ -312,11 +335,6 @@ export class SessionVocale {
         return
       case 'telechargement':
         this.detail = evenement.etat === 'debut' ? 'Téléchargement du modèle de transcription…' : undefined
-        this.emettreEtat()
-        return
-      case 'voix':
-        this.voix = evenement.liste
-        this.voixChoisie = evenement.choisie
         this.emettreEtat()
         return
       case 'resultat':
@@ -505,7 +523,8 @@ export class SessionVocale {
       compteur: 0,
       genere: false,
       fini: false,
-      coupe: false
+      coupe: false,
+      file: Promise.resolve()
     }
     this.tour = tour
     this.phase = 'reflexion'
@@ -568,13 +587,47 @@ export class SessionVocale {
     }
   }
 
+  /**
+   * Une phrase prete a etre dite. Elle part d'abord au modele, qui en rend un
+   * fichier et l'instant de chacun de ses mots ; le helper ne fait que le
+   * jouer. La file preserve l'ordre : une phrase courte calculee plus vite que
+   * la precedente ne la double pas.
+   */
   private dire(tour: TourParle, phrase: Phrase): void {
     const texte = pourLaVoix(phrase.texte)
     if (!/[\p{L}\p{N}]/u.test(texte)) return
     const id = `${tour.messageId}:${tour.compteur++}`
     tour.phrases.set(id, { id, texte, debut: phrase.debut, fin: phrase.fin, etat: 'en-file' })
     tour.ordre.push(id)
-    this.helper?.envoyer({ cmd: 'dire', id, texte })
+    tour.file = tour.file.then(async () => {
+      if (tour !== this.tour || tour.coupe || this.fermee) {
+        this.abandonner(tour, id)
+        return
+      }
+      try {
+        const parole = await synthetiser(texte, this.voixChoisie, this.vitesse)
+        if (!parole || tour.coupe || this.fermee) {
+          this.abandonner(tour, id)
+          return
+        }
+        this.helper?.envoyer({ cmd: 'jouer', id, chemin: parole.chemin, jalons: parole.jalons })
+      } catch (erreur) {
+        this.erreur = describeError(erreur)
+        this.abandonner(tour, id)
+        this.emettreEtat()
+      }
+    })
+  }
+
+  /**
+   * Une phrase qui ne sera pas dite — coupee avant son tour, ou perdue par le
+   * moteur — ne doit pas retenir la fin du tour : sans cela, la session
+   * resterait a jamais en train de parler.
+   */
+  private abandonner(tour: TourParle, id: string): void {
+    const phrase = tour.phrases.get(id)
+    if (phrase && phrase.etat === 'en-file') phrase.etat = 'abandonnee'
+    this.verifierFin(tour)
   }
 
   private surDebut(id: string): void {

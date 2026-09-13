@@ -43,141 +43,154 @@ final class Sortie {
 }
 
 func emettre(_ objet: [String: Any]) { Sortie.partagee.emettre(objet) }
-
-// MARK: - La bouche
+// MARK: - Le lecteur
 
 /**
- * Une phrase a la fois, dans l'ordre ou elles arrivent. Chaque phrase porte
- * l'identifiant que le processus principal lui a donne : c'est lui qu'on
- * rend dans « debut », « mot », « fin » et « arret », pour qu'il sache de
- * quelle phrase il s'agit sans tenir de compte de son cote.
+ * La voix de l'assistant arrive toute faite : Kokoro la fabrique dans un
+ * processus a part et depose un fichier. Le role du lecteur est de l'enchainer
+ * sans couture, de dire a quel mot il en est, et de se taire sur-le-champ.
+ *
+ * Chaque morceau porte les instants de ses mots. On ne les devine pas : ils
+ * viennent des durees que le modele a rendues phoneme par phoneme. Le lecteur
+ * suit la position reelle de la tete de lecture et annonce chaque mot quand il
+ * est atteint — c'est ce qui permet, a la coupure, de savoir ce qui a ete
+ * entendu et non ce qui avait ete prevu.
  */
-final class Bouche: NSObject, AVSpeechSynthesizerDelegate {
-    private let synthese = AVSpeechSynthesizer()
-    /** L'identifiant de chaque phrase en file ou en cours. */
-    private var identifiants: [AVSpeechUtterance: String] = [:]
-    private var enCours: String?
-    /** Position du dernier mot commence dans la phrase en cours. */
+final class Lecteur {
+    private let moteur = AVAudioEngine()
+    private let lecteur = AVAudioPlayerNode()
+    private var branche = false
+    private var format: AVAudioFormat?
+
+    /** Un morceau en file : ou il commence dans le flux, et ou en sont ses mots. */
+    private struct Morceau {
+        let id: String
+        let chemin: String
+        let debut: AVAudioFramePosition
+        let longueur: AVAudioFramePosition
+        let taux: Double
+        /** Les mots, chacun avec l'instant ou il se prononce. */
+        var jalons: [(quand: Double, position: Int, longueur: Int)]
+        var suivant = 0
+        var commence = false
+    }
+
+    private var file: [Morceau] = []
+    private var cumul: AVAudioFramePosition = 0
+    private var horloge: DispatchSourceTimer?
+    /** Le dernier mot annonce, pour le dire a celui qui coupe. */
     private var dernierMot: Int?
-    private var voix: AVSpeechSynthesisVoice? = Bouche.meilleureVoix()
-    private var vitesse: Float = 1.0
+    private var enCours: String?
 
-    private static let CHAUFFE = "#chauffe"
-
-    override init() {
-        super.init()
-        synthese.delegate = self
-    }
-
-    // Les voix francaises, et laquelle prendre quand personne n'a choisi :
-    // la meilleure qualite d'abord (une voix amelioree telechargee par
-    // l'utilisateur passe devant les compactes), la France devant le Canada,
-    // les voix modernes devant les voix Eloquence de synthese formantique.
-    static func voixFrancaises() -> [AVSpeechSynthesisVoice] {
-        AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language.hasPrefix("fr") }
-            .sorted { rang($0) > rang($1) }
-    }
-
-    private static func rang(_ voix: AVSpeechSynthesisVoice) -> Int {
-        var rang = voix.quality.rawValue * 100
-        if voix.language == "fr-FR" { rang += 20 }
-        if !voix.identifier.contains("eloquence") { rang += 10 }
-        if voix.name.hasPrefix("Thomas") || voix.name.hasPrefix("Audrey") || voix.name.hasPrefix("Aurélie") { rang += 5 }
-        return rang
-    }
-
-    static func meilleureVoix() -> AVSpeechSynthesisVoice? { voixFrancaises().first }
-
-    func liste() {
-        emettre([
-            "ev": "voix",
-            "choisie": voix?.identifier ?? "",
-            "liste": Bouche.voixFrancaises().map {
-                ["id": $0.identifier, "nom": $0.name, "langue": $0.language, "qualite": $0.quality.rawValue]
+    func jouer(id: String, chemin: String, jalons: [[String: Any]]) {
+        do {
+            let fichier = try AVAudioFile(forReading: URL(fileURLWithPath: chemin))
+            let formatFichier = fichier.processingFormat
+            if !branche || format?.sampleRate != formatFichier.sampleRate {
+                if branche { moteur.disconnectNodeOutput(lecteur) } else { moteur.attach(lecteur) }
+                moteur.connect(lecteur, to: moteur.mainMixerNode, format: formatFichier)
+                format = formatFichier
+                branche = true
             }
-        ])
+            if !moteur.isRunning {
+                moteur.prepare()
+                try moteur.start()
+            }
+
+            let morceau = Morceau(
+                id: id,
+                chemin: chemin,
+                debut: cumul,
+                longueur: fichier.length,
+                taux: formatFichier.sampleRate,
+                jalons: jalons.compactMap { jalon in
+                    guard let quand = jalon["quand"] as? Int,
+                          let position = jalon["position"] as? Int,
+                          let longueur = jalon["longueur"] as? Int else { return nil }
+                    return (Double(quand) / 1000, position, longueur)
+                }
+            )
+            cumul += fichier.length
+            file.append(morceau)
+            lecteur.scheduleFile(fichier, at: nil)
+            if !lecteur.isPlaying { lecteur.play() }
+            suivre()
+        } catch {
+            Sortie.partagee.erreur("lecture : \(error.localizedDescription)")
+            emettre(["ev": "fin", "id": id])
+        }
     }
 
-    func choisir(_ identifiant: String) {
-        if let choisie = AVSpeechSynthesisVoice(identifier: identifiant) { voix = choisie }
+    /** Ou en est la tete de lecture, en images depuis le debut de la file. */
+    private func position() -> AVAudioFramePosition? {
+        guard let noeud = lecteur.lastRenderTime, let temps = lecteur.playerTime(forNodeTime: noeud) else { return nil }
+        return temps.sampleTime
     }
 
-    func regler(vitesse: Double) { self.vitesse = Float(vitesse) }
-
-    func dire(id: String, texte: String) {
-        let phrase = AVSpeechUtterance(string: texte)
-        phrase.voice = voix
-        phrase.rate = min(AVSpeechUtteranceDefaultSpeechRate * vitesse, AVSpeechUtteranceMaximumSpeechRate)
-        identifiants[phrase] = id
-        synthese.speak(phrase)
+    private func suivre() {
+        guard horloge == nil else { return }
+        let minuteur = DispatchSource.makeTimerSource(queue: .main)
+        // Vingt-cinq millisecondes : plus fin que l'oreille ne distingue deux
+        // mots, et assez large pour ne rien couter.
+        minuteur.schedule(deadline: .now(), repeating: .milliseconds(25))
+        minuteur.setEventHandler { [weak self] in self?.avancer() }
+        horloge = minuteur
+        minuteur.resume()
     }
 
-    /**
-     * La premiere prise de parole d'une voix coute presque une seconde de
-     * chargement ; les suivantes, quelques dizaines de millisecondes. On lui
-     * fait dire un mot en silence a l'entree dans le mode, pour que la
-     * premiere vraie phrase parte a chaud. Un blanc ne suffit pas a charger
-     * la voix — il faut un mot.
-     */
-    func chauffer() {
-        let phrase = AVSpeechUtterance(string: "un")
-        phrase.voice = voix
-        phrase.volume = 0
-        identifiants[phrase] = Bouche.CHAUFFE
-        synthese.speak(phrase)
+    private func avancer() {
+        guard let position = position() else { return }
+        while var morceau = file.first {
+            if !morceau.commence {
+                morceau.commence = true
+                enCours = morceau.id
+                dernierMot = nil
+                emettre(["ev": "debut", "id": morceau.id])
+            }
+            // Les mots atteints depuis le dernier tour.
+            while morceau.suivant < morceau.jalons.count {
+                let jalon = morceau.jalons[morceau.suivant]
+                let quand = morceau.debut + AVAudioFramePosition(jalon.quand * morceau.taux)
+                if position < quand { break }
+                morceau.suivant += 1
+                dernierMot = jalon.position
+                emettre(["ev": "mot", "id": morceau.id, "debut": jalon.position, "longueur": jalon.longueur])
+            }
+            if position < morceau.debut + morceau.longueur {
+                file[0] = morceau
+                return
+            }
+            file.removeFirst()
+            try? FileManager.default.removeItem(atPath: morceau.chemin)
+            enCours = nil
+            emettre(["ev": "fin", "id": morceau.id])
+        }
+        // Plus rien a dire : on remet la tete de lecture a zero, pour que le
+        // prochain morceau reparte d'une horloge propre.
+        horloge?.cancel()
+        horloge = nil
+        lecteur.stop()
+        cumul = 0
+        moteur.stop()
     }
 
-    /**
-     * Se taire immediatement : la phrase en cours s'arrete au milieu d'un mot,
-     * celles en file sont abandonnees. On rend ou l'on en etait — la phrase et
-     * le dernier mot commence — avant que le synthetiseur ne l'oublie.
-     */
+    /** Se taire sur-le-champ, et dire sur quel mot. */
     func stop() {
         let id = enCours
         let mot = dernierMot
-        synthese.stopSpeaking(at: .immediate)
-        // Les phrases abandonnees ne meritent ni « fin » ni « debut » : on les
-        // oublie avant que leurs rappels n'arrivent.
-        identifiants.removeAll()
+        horloge?.cancel()
+        horloge = nil
+        lecteur.stop()
+        for morceau in file { try? FileManager.default.removeItem(atPath: morceau.chemin) }
+        file.removeAll()
+        cumul = 0
         enCours = nil
         dernierMot = nil
+        moteur.stop()
         var evenement: [String: Any] = ["ev": "arret"]
         if let id { evenement["id"] = id }
         if let mot { evenement["mot"] = mot }
         emettre(evenement)
-    }
-
-    // MARK: rappels du synthetiseur
-
-    func speechSynthesizer(_ s: AVSpeechSynthesizer, didStart phrase: AVSpeechUtterance) {
-        guard let id = identifiants[phrase], id != Bouche.CHAUFFE else { return }
-        enCours = id
-        dernierMot = nil
-        emettre(["ev": "debut", "id": id])
-    }
-
-    func speechSynthesizer(_ s: AVSpeechSynthesizer, willSpeakRangeOfSpeechString plage: NSRange, utterance phrase: AVSpeechUtterance) {
-        guard let id = identifiants[phrase], id != Bouche.CHAUFFE else { return }
-        dernierMot = plage.location
-        emettre(["ev": "mot", "id": id, "debut": plage.location, "longueur": plage.length])
-    }
-
-    func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish phrase: AVSpeechUtterance) { terminee(phrase) }
-    func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel phrase: AVSpeechUtterance) { terminee(phrase) }
-
-    private func terminee(_ phrase: AVSpeechUtterance) {
-        // Une phrase stoppee a deja ete oubliee : rien a dire.
-        guard let id = identifiants.removeValue(forKey: phrase) else { return }
-        if id == Bouche.CHAUFFE {
-            emettre(["ev": "chaud"])
-            return
-        }
-        if enCours == id {
-            enCours = nil
-            dernierMot = nil
-        }
-        emettre(["ev": "fin", "id": id])
     }
 }
 
@@ -413,24 +426,20 @@ final class Oreille {
 
 // MARK: - Les commandes
 
-let bouche = Bouche()
+let lecteur = Lecteur()
 var oreille: Oreille? = nil
 if #available(macOS 26.0, *) { oreille = Oreille() }
 
 func traiter(_ commande: String, _ objet: [String: Any]) {
     switch commande {
-    case "dire":
-        bouche.dire(id: objet["id"] as? String ?? "", texte: objet["texte"] as? String ?? "")
+    case "jouer":
+        lecteur.jouer(
+            id: objet["id"] as? String ?? "",
+            chemin: objet["chemin"] as? String ?? "",
+            jalons: objet["jalons"] as? [[String: Any]] ?? []
+        )
     case "stop":
-        bouche.stop()
-    case "voix":
-        if let id = objet["id"] as? String { bouche.choisir(id) }
-    case "vitesse":
-        if let valeur = objet["valeur"] as? Double { bouche.regler(vitesse: valeur) }
-    case "chauffer":
-        bouche.chauffer()
-    case "voix-liste":
-        bouche.liste()
+        lecteur.stop()
     case "ecouter":
         guard let oreille else { Sortie.partagee.erreur("la transcription demande macOS 26"); return }
         let annulationEcho = objet["aec"] as? Bool ?? true

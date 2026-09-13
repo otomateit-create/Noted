@@ -10,16 +10,13 @@ import { spawn } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { chmodSync } from 'node:fs'
 import path from 'node:path'
-import type { VoixDisponible } from '../../shared/types'
+import type { Jalon } from './kokoro'
 
 /** Ce que le processus principal peut lui demander. */
 export type CommandeVoix =
-  | { cmd: 'dire'; id: string; texte: string }
+  /** Un fichier a jouer, avec l'instant de chacun de ses mots. */
+  | { cmd: 'jouer'; id: string; chemin: string; jalons: Jalon[] }
   | { cmd: 'stop' }
-  | { cmd: 'voix'; id: string }
-  | { cmd: 'vitesse'; valeur: number }
-  | { cmd: 'chauffer' }
-  | { cmd: 'voix-liste' }
   | { cmd: 'ecouter' }
   | { cmd: 'taire' }
   | { cmd: 'finaliser' }
@@ -36,8 +33,6 @@ export type EvenementVoix =
   | { ev: 'mot'; id: string; debut: number; longueur: number }
   | { ev: 'fin'; id: string }
   | { ev: 'arret'; id?: string; mot?: number }
-  | { ev: 'chaud' }
-  | { ev: 'voix'; liste: VoixDisponible[]; choisie: string }
   | { ev: 'injecte'; chemin: string }
   | { ev: 'erreur'; message: string }
 

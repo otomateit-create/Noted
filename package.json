@@ -35,6 +35,8 @@
       "node_modules/@anthropic-ai/claude-agent-sdk/**/*",
       "out/main/embed-worker.cjs",
       "out/main/voix-helper",
+      "out/main/kokoro-worker.cjs",
+      "node_modules/espeak-ng/**/*",
       "node_modules/@huggingface/**/*",
       "node_modules/onnxruntime-node/**/*",
       "node_modules/onnxruntime-common/**/*",
@@ -66,6 +68,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.231",
     "@huggingface/transformers": "^4.2.0",
+    "espeak-ng": "^1.0.2",
     "gray-matter": "^4.0.3",
     "mammoth": "^1.12.1",
     "sharp": "^0.34.5",
