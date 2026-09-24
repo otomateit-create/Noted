@@ -735,7 +735,10 @@
 
 /* La session remplit la plaque sans defiler : tout tient a l'ecran, c'est la
    carte qui defile en dernier recours. La lumiere ambiante reprend la teinte
-   de la matiere, en nappes assez diluees pour laisser vivre le verre. */
+   de la matiere, en nappes assez diluees pour laisser vivre le verre : un
+   jour qui tombe d'en haut, un reflet qui remonte du bas. La lampe elle-meme
+   est accrochee a la carte (.fc-scene::before) et la suit quand le tuteur
+   la pousse a gauche. */
 .fc-session {
   flex: 1;
   min-width: 0;
@@ -746,14 +749,14 @@
   font-family: var(--font-system);
   background:
     radial-gradient(
-      640px 340px at 50% -8%,
-      color-mix(in srgb, var(--tint-from) 16%, transparent),
-      transparent 65%
+      720px 340px at 50% -10%,
+      color-mix(in srgb, var(--tint-from) 15%, transparent),
+      transparent 66%
     ),
     radial-gradient(
-      560px 420px at 88% 108%,
-      color-mix(in srgb, var(--tint-to) 9%, transparent),
-      transparent 62%
+      980px 420px at 50% 114%,
+      color-mix(in srgb, var(--tint-to) 11%, transparent),
+      transparent 64%
     );
 }
 
@@ -821,7 +824,7 @@
 .fc-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--shell-text);
+  background: linear-gradient(90deg, var(--tint-from), var(--tint-to));
   transition: width 300ms var(--swift);
 }
 
@@ -837,15 +840,18 @@
   padding: var(--space-4) 0 0;
 }
 
+/* La colonne d'etude : sa taille borne celle de la carte (mesuree en script,
+   voir fitCard), et c'est un conteneur pour caler les commandes dessous. */
 .fc-study {
   flex: 1;
   min-width: 0;
   align-self: stretch;
+  container-type: size;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
+  gap: 30px;
 }
 
 .fc-ghost {
@@ -854,23 +860,7 @@
   color: var(--shell-text-ghost);
 }
 
-/* D'ou vient la carte : pastille de la couleur d'origine, cours, page. */
-.fc-context {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  max-width: min(620px, 100%);
-  font-size: var(--text-sm);
-  color: var(--shell-text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.fc-context > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
+/* La pastille d'origine : la couleur du surlignage dont la carte est nee. */
 .fc-chip {
   flex: none;
   width: 9px;
@@ -881,17 +871,112 @@
 
 /* --- La carte et son retournement ----------------------------------------- */
 
+/* La scene prend la taille de la carte du moment, calculee sur son texte
+   (fitCard) : toujours un rectangle 3:2, qui grandit par paliers quand le
+   texte l'exige et s'arrete a la place disponible. D'une carte a l'autre,
+   elle glisse vers la nouvelle taille, et la pile avec elle. */
 .fc-scene {
   position: relative;
-  width: min(620px, 100%);
-  perspective: 1600px;
+  isolation: isolate;
+  flex: none;
+  transition:
+    width 0.3s var(--ease),
+    height 0.3s var(--ease);
 }
 
-/* Les deux faces occupent la meme cellule de grille : la carte prend la
-   hauteur de la plus grande, et le retournement n'a rien a mesurer. */
+/* Tuteur ouvert : le robot n'a plus besoin que de sa place a droite, la
+   carte reprend celle de gauche. La marge decale le centrage d'autant. */
+.fc-stage[data-tutor] .fc-scene {
+  margin-right: 56px;
+}
+
+.fc-stage[data-tutor] .fc-controls {
+  width: min(600px, 100cqw - 60px);
+  margin-right: 56px;
+}
+
+/* La lampe : un halo dans la teinte de la matiere, derriere la carte. */
+.fc-scene::before {
+  content: '';
+  position: absolute;
+  inset: -34% -26%;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--tint-from) 34%, transparent),
+    color-mix(in srgb, var(--tint-from) 12%, transparent) 58%,
+    transparent
+  );
+}
+
+/* La pile : les cartes qui restent, en tranches sous celle du moment.
+   L'origine en bas : reduites, elles restent posees sur la meme ligne et ne
+   depassent que par le bas. */
+.fc-stack {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fc-stack-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  background: var(--paper-raised);
+  border: 1px solid rgba(74, 58, 33, 0.1);
+  box-shadow:
+    0 1px 2px rgba(74, 58, 33, 0.06),
+    0 8px 18px -10px rgba(74, 58, 33, 0.2);
+  transform-origin: 50% 100%;
+  transition: opacity var(--normal) var(--swift);
+}
+
+.fc-stack-card:nth-child(1) {
+  transform: translateY(20px) scale(0.9);
+  background: var(--paper);
+}
+
+.fc-stack-card:nth-child(2) {
+  transform: translateY(10px) scale(0.95);
+}
+
+.fc-stack[data-depth='1'] .fc-stack-card:nth-child(1),
+.fc-stack[data-depth='0'] .fc-stack-card {
+  opacity: 0;
+}
+
+/* L'emplacement d'une carte, a sa propre taille, centre dans la scene : la
+   carte qui sort garde la sienne pendant que la scene prend celle de la
+   suivante. La perspective vit ici, pour que l'entree et la sortie (sur
+   l'emplacement) n'aplatissent pas le retournement (sur la carte). */
+.fc-slot {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  perspective: 2000px;
+}
+
+/* L'ombre portee sur le bureau. Elle ne tourne pas avec la carte : c'est
+   elle qui dit que la carte se souleve (FlipCard l'etale et la palit). */
+.fc-ground {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: -18px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(74, 58, 33, 0.26), transparent);
+  filter: blur(7px);
+  pointer-events: none;
+}
+
+/* Les deux faces occupent la meme cellule, a la hauteur fixe de la scene. */
 .fc-card {
+  position: relative;
   display: grid;
-  width: 100%;
+  grid-template: 100% / 100%;
+  height: 100%;
   transform-style: preserve-3d;
 }
 
@@ -899,35 +984,113 @@
   cursor: pointer;
 }
 
+/* Une fiche : un blanc a peine chaud, plus clair que tout ce qui l'entoure,
+   bord brun tres dilue, ombres chaudes. */
 .fc-face {
   grid-area: 1 / 1;
   display: flex;
-  min-height: 300px;
-  max-height: min(56vh, 540px);
-  border-radius: 18px;
-  background: var(--shell-surface);
-  border: 1px solid var(--shell-line);
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 20px;
+  background: #fffefb;
+  border: 1px solid rgba(74, 58, 33, 0.11);
   box-shadow:
-    0 1px 1px rgba(20, 30, 50, 0.04),
-    0 6px 16px rgba(20, 30, 50, 0.06),
-    0 22px 48px -8px rgba(20, 30, 50, 0.1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 1px rgba(74, 58, 33, 0.05),
+    0 12px 28px -12px rgba(74, 58, 33, 0.2);
+  overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
 }
 
 /* Le verso attend, deja retourne : il se retrouve a l'endroit quand la carte
-   pivote de 180 degres sur son axe horizontal. */
+   pivote de 180 degres sur son axe vertical. */
 .fc-face--back {
-  transform: rotateX(180deg);
+  transform: rotateY(180deg);
 }
 
-/* Centre quand le contenu est court, defile quand il est long. */
+/* La ligne du haut de la fiche bristol : ce qu'on lit a gauche, d'ou vient
+   la carte a droite, et le filet dans la teinte de la matiere. */
+.fc-face-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 30px;
+  padding: 17px 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tint-to) 30%, transparent);
+  font-family: var(--font-system);
+}
+
+.fc-face-label {
+  flex: none;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tint-to) 80%, var(--text));
+}
+
+.fc-face-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.fc-face-source-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Le corps : centre quand le contenu est court (safe : un contenu long part
+   du haut au lieu de deborder des deux cotes). La carte grandit pour que le
+   texte tienne ; il ne defile (data-overflow) que si la plus grande carte
+   possible ne suffit pas. */
 .fc-face-scroll {
-  margin: auto;
-  width: 100%;
-  max-height: 100%;
+  --fc-size: 17px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
   overflow-y: auto;
-  padding: 30px 36px;
+  padding: 20px 36px 26px;
+}
+
+/* Le recto est une question : plus grande, et un peu au-dessus du centre,
+   la ou l'oeil se pose. */
+.fc-face--front .fc-face-scroll {
+  --fc-size: 21px;
+  padding-bottom: 44px;
+}
+
+/* La plus grande carte ne suffit pas : la face defile, et un fondu dit
+   qu'il y a une suite. Le rembourrage du bas degage la derniere ligne du
+   fondu en fin de course. */
+.fc-face-scroll[data-overflow] {
+  padding-bottom: 46px;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+}
+
+.fc-face-scroll .fc-markdown {
+  font-size: var(--fc-size);
+}
+
+/* Une question d'un seul tenant se lit centree, en lignes equilibrees ; une
+   liste ou un tableau garde son alignement a gauche. */
+.fc-face--front .fc-markdown {
+  line-height: 1.45;
+  letter-spacing: -0.004em;
+}
+
+.fc-face--front .fc-markdown:not(:has(ul, ol, table, pre, blockquote, .katex-display)) {
+  text-align: center;
+  text-wrap: balance;
 }
 
 /* Sur le verso, la question reste en tete, en petit : on verifie ce qu'on
@@ -937,12 +1100,13 @@
 }
 
 .fc-recap .fc-markdown {
-  font-size: 13.5px;
+  font-size: calc(var(--fc-size) * 0.8);
   line-height: 1.5;
   color: inherit;
 }
 
 .fc-face-rule {
+  flex: none;
   height: 1px;
   margin: 14px 0 16px;
   background: var(--shell-line);
@@ -1112,7 +1276,7 @@
 
 /* Hauteur reservee : retourner la carte ne fait pas sauter la mise en page. */
 .fc-controls {
-  width: min(620px, 100%);
+  width: min(600px, 100cqw - 112px);
   min-height: 78px;
   display: flex;
   flex-direction: column;
@@ -1167,6 +1331,39 @@
     transform var(--fast) var(--swift),
     border-color var(--fast) var(--swift),
     box-shadow var(--fast) var(--swift);
+  /* Les reponses se posent l'une apres l'autre, pendant que la carte finit
+     de se retourner. « backwards » seulement : une fois posees, le survol
+     retrouve la main sur transform. */
+  animation: fc-rise 0.3s var(--ease) 0.16s backwards;
+}
+
+.fc-grade:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.fc-grade:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.fc-grade:nth-child(4) {
+  animation-delay: 0.28s;
+}
+
+@keyframes fc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fc-grade {
+    animation: none;
+  }
+
+  .fc-scene {
+    transition: none;
+  }
 }
 
 .fc-grade:hover:not(:disabled) {
@@ -1231,10 +1428,12 @@
   width: 46px;
   height: 46px;
   border-radius: 999px;
-  border: 1px solid var(--shell-line-strong);
-  color: var(--shell-text);
-  background: var(--shell-surface);
-  box-shadow: 0 1px 2px rgba(15, 17, 22, 0.05);
+  color: #fff;
+  /* L'orbe de la matiere : la session finit dans sa couleur. */
+  background: linear-gradient(150deg, var(--tint-from), var(--tint-to));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 6px 16px -4px color-mix(in srgb, var(--tint-to) 45%, transparent);
 }
 
 .fc-final-glyph svg {
