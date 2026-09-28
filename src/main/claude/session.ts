@@ -148,6 +148,14 @@ async function buildOptions(
     // Necessaire pour recevoir le texte au fil de l'eau plutot qu'en bloc.
     includePartialMessages: true,
 
+    // La reflexion, rendue lisible. Depuis Opus 5.5, l'API la rend vide par
+    // defaut — et avec elle les notes que le modele ecrit entre deux appels
+    // d'outils : un resume de cours, c'etaient des minutes de « Reflexion »
+    // sans rien a lire. Le reglage ne touche que l'affichage, la reflexion est
+    // facturee pareil. En drapeau plutot que par l'option `thinking`, qui
+    // imposerait aussi le mode adaptatif a un modele qui ne l'a pas (Haiku).
+    extraArgs: { 'thinking-display': 'summarized' },
+
     // Deux outils rendent la main a l'utilisateur et attendent sa decision :
     // une proposition d'ecriture dans les notes, et un quiz a remplir. Le
     // delai par defaut des outils MCP couperait l'appel avant qu'il ait fini
@@ -169,7 +177,10 @@ async function buildOptions(
     // Une reponse documentee enchaine plusieurs recherches, parfois une lecture
     // de section et un detour par le web. Le plafond precedent, prevu pour une
     // reponse en un tour, coupait desormais la parole en pleine investigation.
-    maxTurns: 24
+    // Et un resume de cours s'ecrit partie par partie, un echange par partie :
+    // dix-neuf sections et leurs lectures depassaient les vingt-quatre
+    // echanges d'avant, et la note se serait arretee au milieu du cours.
+    maxTurns: 60
   }
 
   if (executable) {
@@ -270,12 +281,12 @@ export async function send(
     /**
      * Le brouillon oublie.
      *
-     * L'assistant depose ses passages par `note_brouillon` et les pose par
-     * `note_poser` ; rien ne garantit qu'il appelle le second. Un tour peut
-     * finir sur une phrase de conclusion, sur une erreur du moteur, sur un
-     * plafond de tokens — et le travail d'ecriture d'un tour ne doit pas
-     * dependre de ce que le modele a pense a faire en dernier. On pose donc ce
-     * qui reste, ici, ou l'on passe quoi qu'il arrive.
+     * Chaque `note_brouillon` entre dans la note aussitot ; ce qui reste au
+     * brouillon, c'est ce qu'une ecriture n'a pas pu poser — le panneau des
+     * notes etait ferme, la note changeait sous la frappe. Rien ne garantit
+     * que l'assistant pense a le reposer par `note_poser`, et le travail
+     * d'ecriture d'un tour ne doit pas dependre de ce qu'il a pense a faire en
+     * dernier. On pose donc ce qui reste, ici, ou l'on passe quoi qu'il arrive.
      *
      * Sauf sur interruption : l'utilisateur a demande l'arret, et lui ecrire
      * dans ses notes juste apres serait le contraire de ce qu'il a demande. Le
@@ -351,6 +362,27 @@ interface Composing {
 /** Au plus un rendu du brouillon par ce laps de temps. */
 const DRAFT_INTERVAL = 150
 
+/** Au plus une mise a jour du compteur de tokens par ce laps de temps. */
+const TOKENS_INTERVAL = 250
+
+/**
+ * Caracteres par token, pour estimer une reponse en cours. Mesure sur un
+ * resume de cours : 2,1 dans les parametres d'une ecriture de notes, 2,4 dans
+ * une reponse en francais. Trois sous-estime donc un peu : le compte exact, a
+ * la fin de chaque reponse, fait monter le compteur plutot que redescendre.
+ */
+const CHARS_PER_TOKEN = 3
+
+/**
+ * Ce qui ouvre un nouveau paragraphe apres `before` : deux sauts de ligne,
+ * moins ceux qu'il laisse deja derriere lui — un resume de reflexion finit
+ * souvent sur une ligne vide.
+ */
+function paragraphBreak(before: string): string {
+  if (!before || before.endsWith('\n\n')) return ''
+  return before.endsWith('\n') ? '\n' : '\n\n'
+}
+
 /**
  * Fait defiler un tour : deltas de texte et de reflexion, appels d'outils et
  * leurs resultats, compteur de tokens, echec eventuel. Partage entre la
@@ -370,6 +402,31 @@ export async function pumpTurn(
   let tokensCommitted = 0
   let tokensCurrent = 0
 
+  // Le compte exact d'une reponse n'arrive qu'a sa fin, et une reponse peut
+  // durer des minutes : un resume de cours ecrit d'un bloc en a pris trois,
+  // compteur fige. En attendant, on l'estime sur ce qui s'ecrit — texte,
+  // reflexion, parametres d'outils.
+  let streamedChars = 0
+  let tokensShown = 0
+  let tokensShownAt = 0
+  const showTokens = (tokens: number, exact: boolean): void => {
+    const now = Date.now()
+    if (tokens <= tokensShown || (!exact && now - tokensShownAt < TOKENS_INTERVAL)) return
+    tokensShown = tokens
+    tokensShownAt = now
+    emit({ kind: 'tokens', messageId, tokens })
+  }
+
+  // Un tour ecrit et reflechit parfois plusieurs fois, entre deux appels
+  // d'outils — « Sections 1 a 4 ecrites », puis la suite : chaque bloc ouvre
+  // son paragraphe, sans quoi il commencerait au milieu de la derniere phrase
+  // du precedent. Meme regle qu'a la relecture de l'historique. On garde la
+  // fin de ce qui est deja parti, pour compter les sauts de ligne a ajouter.
+  let textTail = ''
+  let textBreak = false
+  let thinkingTail = ''
+  let thinkingBreak = false
+
   // Les ecritures de notes en cours de composition, par rang de bloc dans la
   // reponse en cours : le JSON recu jusqu'ici, et quand on l'a montre.
   const composing = new Map<number, Composing>()
@@ -387,10 +444,20 @@ export async function pumpTurn(
 
       if (event.type === 'content_block_delta') {
         if (event.delta.type === 'text_delta' && event.delta.text) {
-          emit({ kind: 'text', messageId, delta: event.delta.text })
+          const delta = (textBreak ? paragraphBreak(textTail) : '') + event.delta.text
+          emit({ kind: 'text', messageId, delta })
+          streamedChars += event.delta.text.length
+          textTail = (textTail + delta).slice(-2)
+          textBreak = false
         } else if (event.delta.type === 'thinking_delta' && event.delta.thinking) {
-          emit({ kind: 'thinking', messageId, delta: event.delta.thinking })
+          const delta =
+            (thinkingBreak ? paragraphBreak(thinkingTail) : '') + event.delta.thinking
+          emit({ kind: 'thinking', messageId, delta })
+          streamedChars += event.delta.thinking.length
+          thinkingTail = (thinkingTail + delta).slice(-2)
+          thinkingBreak = false
         } else if (event.delta.type === 'input_json_delta') {
+          streamedChars += event.delta.partial_json.length
           const draft = composing.get(event.index)
           if (draft && drafts) {
             draft.json += event.delta.partial_json
@@ -404,13 +471,17 @@ export async function pumpTurn(
             }
           }
         }
+        showTokens(tokensCommitted + Math.round(streamedChars / CHARS_PER_TOKEN), false)
         continue
       }
 
-      // Un appel d'outil qui ecrit dans les notes commence : on suivra son
-      // texte pour le montrer avant meme qu'il ne soit appele.
+      // Un bloc commence. Texte ou reflexion : il ouvrira son paragraphe s'il
+      // en suit un autre. Appel d'outil qui ecrit dans les notes : on suivra
+      // son texte pour le montrer avant meme qu'il ne soit appele.
       if (event.type === 'content_block_start') {
         const block = event.content_block
+        if (block.type === 'text') textBreak = true
+        if (block.type === 'thinking') thinkingBreak = true
         if (block.type === 'tool_use' && drafts) {
           const drafted = draftedTool(block.name)
           if (drafted) {
@@ -435,6 +506,7 @@ export async function pumpTurn(
       if (event.type === 'message_start') {
         tokensCommitted += tokensCurrent
         tokensCurrent = 0
+        streamedChars = 0
         composing.clear()
         continue
       }
@@ -443,13 +515,17 @@ export async function pumpTurn(
         const produced = event.usage?.output_tokens
         if (typeof produced === 'number') {
           tokensCurrent = produced
-          emit({
-            kind: 'tokens',
-            messageId,
-            tokens: tokensCommitted + tokensCurrent
-          })
+          showTokens(tokensCommitted + tokensCurrent, true)
         }
       }
+      continue
+    }
+
+    // Le moteur retente une requete qui a echoue — serveur sature, connexion
+    // coupee. Rien ne s'ecrit pendant l'attente : sans ce signe, on croirait
+    // la reponse bloquee.
+    if (message.type === 'system' && message.subtype === 'api_retry') {
+      emit({ kind: 'retry', messageId, attempt: message.attempt, max: message.max_retries })
       continue
     }
 
@@ -752,7 +828,12 @@ function convertHistory(raw: SessionMessage[]): ChatMessage[] {
       if (block.type === 'text' && typeof block['text'] === 'string') {
         current.text += (current.text ? '\n\n' : '') + (block['text'] as string)
       } else if (block.type === 'thinking' && typeof block['thinking'] === 'string') {
-        current.thinking = (current.thinking ?? '') + (block['thinking'] as string)
+        // Meme separation qu'en direct (voir pumpTurn) : un paragraphe par bloc.
+        const thinking = block['thinking'] as string
+        if (thinking) {
+          const before = current.thinking ?? ''
+          current.thinking = before + paragraphBreak(before) + thinking
+        }
       } else if (block.type === 'tool_use') {
         current.toolCalls = [
           ...(current.toolCalls ?? []),

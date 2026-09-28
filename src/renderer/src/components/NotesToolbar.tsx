@@ -1,20 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
-import { HIGHLIGHT_COLORS } from '@shared/types'
+import { HIGHLIGHT_COLORS, TEXT_COLORS } from '@shared/types'
 
 interface NotesToolbarProps {
   editor: Editor | null
 }
 
 /** Couleurs de texte proposees, en plus des cinq couleurs de surlignage. */
-const TEXT_COLOURS = [
-  { label: 'Par défaut', value: null },
-  { label: 'Laiton', value: '#c9973f' },
-  { label: 'Rouge', value: '#dc5b4c' },
-  { label: 'Vert', value: '#4ca97a' },
-  { label: 'Bleu', value: '#3d8fd1' },
-  { label: 'Violet', value: '#9b6bc4' }
-]
+const TEXT_COLOURS = [{ label: 'Par défaut', value: null }, ...TEXT_COLORS]
 
 export default function NotesToolbar({ editor }: NotesToolbarProps): React.JSX.Element | null {
   // L'editeur ne previent pas React quand la selection change : on force un

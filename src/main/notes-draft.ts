@@ -1,31 +1,32 @@
 /**
- * Le brouillon de l'assistant : ce qu'il ecrit avant que cela n'entre dans la
- * note.
+ * Le brouillon de l'assistant : ce qu'il a ecrit et qui n'est pas encore entre
+ * dans la note.
  *
- * L'assistant n'ecrit plus directement dans les notes. Il depose ses passages
- * ici, chacun accompagne de la page ou de la section du cours sur laquelle il
- * s'appuie — puis, quand il a fini, l'application ancre tout le brouillon d'un
- * seul geste et le verse dans la note.
+ * Chaque ecriture de l'assistant (`note_brouillon`) est posee aussitot : la
+ * note se remplit partie par partie, sous les yeux de l'utilisateur. Le
+ * brouillon garde ce qu'une ecriture n'a pas pu poser — le panneau des notes
+ * etait ferme, la note changeait sous la frappe —, chaque passage accompagne
+ * de la page ou de la section du cours sur laquelle il s'appuie, jusqu'a ce
+ * que `note_poser` ou la fin du tour le verse dans la note.
  *
- * Trois raisons a ce detour, et la troisieme est celle qui a motive le
- * chantier.
+ * Il a longtemps fait plus : tout le tour s'y deposait, puis s'ancrait d'un
+ * seul geste, pour que l'ordre des ancres vaille sur l'ensemble. C'etait avant
+ * que chaque passage declare sa source ; depuis, c'est elle qui borne l'ancre,
+ * et une ecriture n'a plus besoin des autres pour tomber a sa place. Attendre
+ * la fin du tour, en revanche, obligeait l'assistant a rediger un resume de
+ * cours entier d'une seule traite — plusieurs minutes de silence, et tout
+ * perdu a la moindre coupure.
  *
- * D'abord l'ordre. Un tour d'assistant produit souvent plusieurs ecritures ;
- * ancrees separement, chacune ne connait que ses propres blocs, et la
- * monotonie que `resolveAnchorSequence` sait garantir s'arrete a la frontiere
- * d'un appel. Rassembles ici, tous les passages du tour s'ancrent en une seule
- * suite, et l'ordre vaut sur l'ensemble.
+ * Deux raisons restent au detour.
  *
- * Ensuite la survie. Un refus, une interruption, un plantage : le texte reste
- * sur le disque, dans un fichier que l'on peut lire et recuperer a la main.
+ * La survie. Un refus, une interruption, un plantage : le texte reste sur le
+ * disque, dans un fichier que l'on peut lire et recuperer a la main.
  *
- * Enfin la tracabilite, qui manquait cruellement. Ce fichier garde cote a cote
- * ce que l'assistant a *declare* et ce qu'il a *ecrit*. Une ancre fausse se
- * diagnostique alors : ou la source declaree etait la mauvaise — c'est
- * l'assistant —, ou le passage choisi dans la bonne portee etait le mauvais —
- * c'est le vecteur. Deux fautes distinctes, deux corrections distinctes.
- * Auparavant les deux se confondaient dans un unique « l'ancre est fausse »,
- * et rien dans l'application ne permettait de trancher.
+ * La tracabilite. Ce fichier garde cote a cote ce que l'assistant a *declare*
+ * et ce qu'il a *ecrit*. Une ancre fausse se diagnostique alors : ou la source
+ * declaree etait la mauvaise — c'est l'assistant —, ou le passage choisi dans
+ * la bonne portee etait le mauvais — c'est le vecteur. Deux fautes distinctes,
+ * deux corrections distinctes.
  */
 
 import { promises as fs } from 'node:fs'
@@ -109,6 +110,20 @@ function parse(raw: string): DraftPassage[] {
     .filter((passage) => passage.source !== '' && passage.contenu !== '')
 }
 
+/**
+ * Des passages tels qu'ils s'ecrivent : source et texte nettoyes, les vides
+ * retires. Le meme nettoyage, qu'ils partent aussitot dans la note ou qu'ils
+ * attendent ici.
+ */
+export function cleanPassages(passages: DraftPassage[]): DraftPassage[] {
+  return passages
+    .map((passage) => ({
+      source: passage.source.trim(),
+      contenu: stripSourceLines(passage.contenu)
+    }))
+    .filter((passage) => passage.contenu !== '')
+}
+
 /** Ce qui attend dans le brouillon d'un cours. Vide quand il n'y a rien. */
 export async function readDraft(courseId: string): Promise<DraftPassage[]> {
   try {
@@ -131,14 +146,7 @@ export async function appendDraft(
   courseId: string,
   passages: DraftPassage[]
 ): Promise<DraftPassage[]> {
-  const clean = passages
-    .map((passage) => ({
-      source: passage.source.trim(),
-      contenu: stripSourceLines(passage.contenu)
-    }))
-    .filter((passage) => passage.contenu !== '')
-
-  const all = [...(await readDraft(courseId)), ...clean]
+  const all = [...(await readDraft(courseId)), ...cleanPassages(passages)]
   const target = resolveDraftPath(courseId)
   await fs.mkdir(path.dirname(target), { recursive: true })
   await fs.writeFile(target, render(courseId, all), 'utf8')

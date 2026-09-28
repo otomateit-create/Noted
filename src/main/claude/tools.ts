@@ -50,8 +50,8 @@ import { listNoteObjects, uniqueTarget } from '../note-objects'
 import type { NoteObject } from '../note-objects'
 import { readNote } from '../notes'
 import { proposeNoteChange, readLiveNote } from '../notes-bridge'
-import { appendDraft, readDraft } from '../notes-draft'
-import { postDraft } from '../notes-post'
+import { appendDraft, cleanPassages, readDraft } from '../notes-draft'
+import { postDraft, postPassages } from '../notes-post'
 import { askQuiz } from '../quiz-bridge'
 import {
   ANCHOR_LINES,
@@ -383,6 +383,21 @@ function describeProposalStatus(outcome: NoteProposalOutcome): string {
   }
 }
 
+/**
+ * Des passages qui n'ont pas pu entrer dans la note et attendent au brouillon.
+ * Le texte est bon, seul le moment ne l'etait pas : le reecrire le ferait
+ * entrer deux fois.
+ */
+function describeKept(outcome: NoteProposalOutcome): string {
+  const why =
+    outcome.status === 'not-open'
+      ? "Le panneau des notes n'affiche pas ce cours : rien n'a été écrit. Dis-le à l'utilisateur."
+      : outcome.status === 'stale'
+        ? "La note changeait pendant l'écriture — l'utilisateur y tapait : rien n'a été écrit."
+        : "L'écriture n'a pas abouti : rien n'a été écrit."
+  return `${why}\n\nCes passages restent au brouillon : ne les réécris pas. Ils seront posés à la fin de ta réponse, ou tout de suite avec note_poser.`
+}
+
 /** Les outils de lecture ne modifient rien : le moteur peut les lancer ensemble. */
 const READ_ONLY = { annotations: { readOnlyHint: true } }
 
@@ -669,7 +684,7 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
 
       if (!markdown.trim()) {
         return say(
-          "La note de ce cours est encore vide. Tu peux y écrire avec note_brouillon puis note_poser si l'utilisateur le demande."
+          "La note de ce cours est encore vide. Tu peux y écrire avec note_brouillon si l'utilisateur le demande."
         )
       }
 
@@ -702,7 +717,7 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
 
   const noteBrouillon = sdk.tool(
     'note_brouillon',
-    "Depose des passages dans le brouillon de notes du cours ouvert. C'est le seul moyen d'ajouter du contenu aux notes : tu ecris ici, l'application ancre et insere. Chaque passage doit dire, dans « source », la page ou la section du cours sur laquelle il s'appuie — c'est cette declaration, et non une devinette de l'application, qui place la note en face du bon endroit du cours. Un passage regroupe tout ce qui parle du meme endroit : plusieurs paragraphes, un titre et sa liste, un tableau ; ce qui parle d'ailleurs fait un passage separe. Appelle-le autant de fois que tu veux dans un tour — les passages s'accumulent —, puis « note_poser » quand tu as fini. Rien n'atteint la note avant.",
+    "Ecrit des passages dans les notes du cours ouvert. C'est le seul moyen d'ajouter du contenu aux notes : chaque appel est ancre et insere aussitot, a sa place dans l'ordre du cours, et l'utilisateur voit la note se remplir. Chaque passage doit dire, dans « source », la page ou la section du cours sur laquelle il s'appuie — c'est cette declaration, et non une devinette de l'application, qui place la note en face du bon endroit du cours. Un passage regroupe tout ce qui parle du meme endroit : plusieurs paragraphes, un titre et sa liste, un tableau ; ce qui parle d'ailleurs fait un passage separe. Un long travail — le resume d'un cours entier, une fiche en plusieurs parties — s'ecrit partie par partie : un appel par partie, dans l'ordre, chacun ecrit des que la partie est prete, jamais tout d'un bloc a la fin. L'ecriture est directe : l'utilisateur n'a rien a valider.",
     {
       passages: z
         .array(
@@ -717,12 +732,12 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
               .string()
               .min(1)
               .describe(
-                "Le texte du passage, en Markdown — memes conventions que dans le prompt systeme (formules $…$, surlignages ==texte=={couleur}). Tout ce qui est ici partagera une seule ancre : n'y mets que ce qui parle de la meme source."
+                "Le texte du passage, en Markdown — memes conventions que dans le prompt systeme (formules $…$, surlignages ==texte=={couleur}, lettres en couleur [texte]{couleur}). Tout ce qui est ici partagera une seule ancre : n'y mets que ce qui parle de la meme source."
               )
           })
         )
         .min(1)
-        .describe('Les passages a ajouter au brouillon, dans l\'ordre ou tu les ecris.')
+        .describe('Les passages a ecrire dans la note, dans l\'ordre ou tu les ecris.')
     },
     async ({ passages }) => {
       /**
@@ -748,27 +763,51 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
 
       if (problems.length > 0) {
         return say(
-          `${problems.join('\n')}\n\nRien n'a été déposé. Corrige la ou les sources et rappelle note_brouillon avec tous les passages.`
+          `${problems.join('\n')}\n\nRien n'a été écrit. Corrige la ou les sources et rappelle note_brouillon avec tous les passages.`
         )
       }
 
-      const all = await appendDraft(courseId, passages)
-      const total = all.length
-      return say(
-        `${passages.length} passage${passages.length > 1 ? 's' : ''} déposé${passages.length > 1 ? 's' : ''} au brouillon (${total} en attente au total). Continue, ou appelle note_poser quand tu as fini d'écrire.`
-      )
+      const clean = cleanPassages(passages)
+      if (clean.length === 0) return say("Ces passages sont vides : rien n'a été écrit.")
+
+      const { outcome, posted, rejected } = await postPassages(courseId, clean)
+      const refused =
+        rejected.length > 0
+          ? `\n\nCes passages n'ont pas pu être ancrés, et n'ont pas été écrits :\n${rejected.join('\n')}`
+          : ''
+
+      if (!outcome) return say(`Rien n'a été écrit.${refused}`)
+
+      if (outcome.status === 'applied') {
+        return say(
+          `${posted} passage${posted > 1 ? 's' : ''} écrit${posted > 1 ? 's' : ''} dans la note, à ${posted > 1 ? 'leur' : 'sa'} place dans l'ordre du cours.${refused}`
+        )
+      }
+
+      // Une syntaxe refusee — tableau, schema — se corrige : rien n'est garde,
+      // le modele reecrit.
+      if (outcome.status === 'invalid') {
+        return say(
+          `Rien n'a été écrit : ${outcome.detail ?? 'la syntaxe est fautive'}. Corrige, puis rappelle note_brouillon avec ces passages.`
+        )
+      }
+
+      // Le texte est bon, seul le moment ne l'etait pas : il attend au
+      // brouillon, que la fin du tour ou `note_poser` versera dans la note.
+      await appendDraft(courseId, clean)
+      return say(`${describeKept(outcome)}${refused}`)
     }
   )
 
   const notePoser = sdk.tool(
     'note_poser',
-    "Ancre le brouillon et l'ecrit dans les notes du cours ouvert. L'application rattache chaque passage au passage precis du cours dont il parle — a l'interieur de la source que tu as declaree —, range le tout dans l'ordre du cours, et l'insere. Appelle-le une fois, quand tu as fini d'ecrire ; le brouillon est vide ensuite. L'ecriture est directe : l'utilisateur n'a rien a valider.",
+    "Pose ce qui attend au brouillon : des passages qu'une ecriture n'a pas pu mettre dans la note, parce que le panneau des notes etait ferme ou que la note changeait sous la frappe. note_brouillon ecrit deja chaque appel dans la note : n'appelle celui-ci que lorsqu'une ecriture t'a dit avoir garde ses passages au brouillon. L'application les ancre, les range dans l'ordre du cours et les insere ; l'ecriture est directe.",
     {},
     async () => {
       const waiting = await readDraft(courseId)
       if (waiting.length === 0) {
         return say(
-          "Le brouillon est vide : rien à poser. Dépose d'abord tes passages avec note_brouillon."
+          'Le brouillon est vide : tout ce que tu as écrit avec note_brouillon est déjà dans la note. Rien à poser, et rien à réécrire.'
         )
       }
 
@@ -789,6 +828,10 @@ export function courseTools(sdk: AgentSdk, courseId: string) {
 
       // Rien n'est parti : le brouillon est intact et se reposera plus tard.
       // On le dit, sinon le modele reecrirait ce qu'il vient d'ecrire.
+      if (result.outcome && result.outcome.status !== 'invalid') {
+        notes.unshift(describeKept(result.outcome))
+        return say(notes.join('\n\n'))
+      }
       notes.unshift(
         result.outcome
           ? describeProposalStatus(result.outcome)

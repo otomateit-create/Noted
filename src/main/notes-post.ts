@@ -1,25 +1,23 @@
 /**
- * La pose du brouillon : de ce que l'assistant a ecrit a ce qui entre dans la
- * note.
+ * La pose : de ce que l'assistant a ecrit a ce qui entre dans la note.
  *
  * Trois gestes, dans cet ordre, et l'ordre est le sujet.
  *
- * 1. Chaque passage du brouillon devient un emplacement d'ancrage borne par la
- *    source que l'assistant a declaree. Le vecteur ne choisit plus la page —
- *    il ne choisit que la phrase, a l'interieur de cette page-la.
- * 2. Toute la suite s'ancre d'un seul appel. C'est ce qui rend l'ordre des
- *    ancres monotone sur l'ensemble du tour, et non appel par appel : un tour
- *    qui ecrivait trois fois produisait trois suites ordonnees chacune dans son
- *    coin, dont les paquets se marchaient dessus dans la note.
+ * 1. Chaque passage devient un emplacement d'ancrage borne par la source que
+ *    l'assistant a declaree. Le vecteur ne choisit plus la page — il ne
+ *    choisit que la phrase, a l'interieur de cette page-la.
+ * 2. Les passages d'une ecriture s'ancrent d'un seul appel : l'ordre de leurs
+ *    ancres est monotone. D'une ecriture a l'autre, c'est la source declaree
+ *    qui tient chaque passage a sa place — elle borne l'ancre, et le tri range.
  * 3. Le tout part en une seule ecriture, rangee dans l'ordre du cours.
  *
- * Ce module est appele de deux endroits, et c'est pourquoi il n'habite ni
- * `claude/tools.ts` ni `notes-bridge.ts` : par l'outil `note_poser`, quand
- * l'assistant declare avoir fini, et par la fin de tour de `claude/session.ts`,
- * quand il ne l'a pas declare. Le second cas n'est pas un incident a signaler :
- * un modele qui repond longuement peut simplement ne jamais rendre la main sur
- * un dernier appel d'outil, et le travail d'un tour ne doit pas dependre de ce
- * qu'il a pense a faire en dernier.
+ * Ce module est appele de trois endroits, et c'est pourquoi il n'habite ni
+ * `claude/tools.ts` ni `notes-bridge.ts` : par l'outil `note_brouillon`, qui
+ * pose chaque ecriture aussitot — la note se remplit partie par partie, sous
+ * les yeux de l'utilisateur —, et, pour ce qui n'a pas pu l'etre (panneau des
+ * notes ferme, note qui changeait sous la frappe), par l'outil `note_poser` et
+ * par la fin de tour de `claude/session.ts`. Ce qui attend au brouillon ne doit
+ * pas dependre de ce que le modele a pense a faire en dernier.
  */
 
 import { proposeNoteChange } from './notes-bridge'
@@ -82,15 +80,14 @@ function renderPassage(contenu: string, anchor: NoteAnchor | null): string {
 }
 
 /**
- * Ancre le brouillon d'un cours et le verse dans la note, puis le vide.
- *
- * Le brouillon n'est efface que sur une ecriture reellement appliquee. Refus,
- * note absente de l'ecran, texte perime : le fichier reste ou il est, et le
- * travail du tour se recupere — a la main dans `Brouillons/`, ou par une
- * nouvelle pose au tour suivant.
+ * Ancre des passages et les verse dans la note, sans passer par le brouillon :
+ * c'est l'ecriture de `note_brouillon`, a chaque appel. A l'appelant de garder
+ * au brouillon ce qui n'a pas pu etre pose.
  */
-export async function postDraft(courseId: string): Promise<PostedDraft> {
-  const passages = await readDraft(courseId)
+export async function postPassages(
+  courseId: string,
+  passages: DraftPassage[]
+): Promise<PostedDraft> {
   if (passages.length === 0) return { posted: 0, rejected: [] }
 
   const slots: AnchorSlot[] = []
@@ -128,13 +125,25 @@ export async function postDraft(courseId: string): Promise<PostedDraft> {
     // passage rejoint les notes qui parlent du meme endroit du cours, au lieu
     // de s'empiler derriere ce qui parle de la p. 107.
     trier: true,
-    // Sans apercu : le brouillon a ete compose en plusieurs fois, il est deja
-    // passe sous les yeux de l'utilisateur dans le fil du chat, et une carte
-    // de confirmation a la fin ne lui apprendrait rien qu'il n'ait vu.
+    // Sans apercu : le texte s'est ecrit sous les yeux de l'utilisateur, dans
+    // la carte « L'assistant ecrit… », et une carte de confirmation ne lui
+    // apprendrait rien qu'il n'ait vu.
     direct: true
   })
 
-  if (outcome.status === 'applied') await clearDraft(courseId)
-
   return { posted: outcome.status === 'applied' ? kept.length : 0, outcome, rejected }
+}
+
+/**
+ * Ancre le brouillon d'un cours et le verse dans la note, puis le vide.
+ *
+ * Le brouillon n'est efface que sur une ecriture reellement appliquee. Refus,
+ * note absente de l'ecran, texte perime : le fichier reste ou il est, et le
+ * travail du tour se recupere — a la main dans `Brouillons/`, ou par une
+ * nouvelle pose au tour suivant.
+ */
+export async function postDraft(courseId: string): Promise<PostedDraft> {
+  const result = await postPassages(courseId, await readDraft(courseId))
+  if (result.outcome?.status === 'applied') await clearDraft(courseId)
+  return result
 }

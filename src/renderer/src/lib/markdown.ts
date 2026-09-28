@@ -16,6 +16,7 @@ import {
   TABLE_ACCENTS,
   TABLE_DESIGNS,
   TABLE_MARKER,
+  TEXT_COLORS,
   anchorMarker,
   bareLine,
   parseAnchorMarker,
@@ -759,10 +760,18 @@ export const AI_INK = '#5b7c99'
 
 const COLOUR_WASH = new Map(HIGHLIGHT_COLORS.map((colour) => [colour.id as string, colour.wash]))
 
+const COLOUR_INK = new Map(TEXT_COLORS.map((colour) => [colour.code as string, colour.value]))
+
 const COLOUR_IDS = HIGHLIGHT_COLORS.map((colour) => colour.id).join('|')
 
 /** ==texte=={couleur}, ou couleur est l'un des cinq codes semantiques. */
 const COLOURED_HIGHLIGHT = new RegExp(`==([^=\\n]+)==\\{(${COLOUR_IDS})\\}`, 'g')
+
+/**
+ * [texte]{couleur} : les lettres elles-memes dans la teinte du code, sans
+ * fond — ce que pose l'outil « Couleur du texte ».
+ */
+const COLOURED_TEXT = new RegExp(`\\[([^\\[\\]\\n]+)\\]\\{(${COLOUR_IDS})\\}`, 'g')
 
 /** ++texte++, dans une meme ligne : un ajout de l'assistant. */
 const AI_ADDITION = /\+\+([^+\n][^\n]*?)\+\+/g
@@ -772,7 +781,7 @@ const TAG_PATTERN = /<\/?[a-zA-Z][^<>\n]*>/g
 
 /**
  * Prepare le Markdown ecrit par l'assistant : neutralise les balises HTML de
- * son invention, puis convertit ses deux conventions.
+ * son invention, puis convertit ses trois conventions.
  *
  * Le prompt lui interdit deja de composer des balises, mais une interdiction
  * declarative n'est pas une garantie : marked laisse passer le HTML en ligne,
@@ -818,6 +827,10 @@ function prepareAiMarkdown(markdown: string, base: string): string {
     .replace(COLOURED_HIGHLIGHT, (match, content: string, id: string) => {
       const wash = COLOUR_WASH.get(id)
       return wash ? `<mark style="background-color: ${wash}">${content}</mark>` : match
+    })
+    .replace(COLOURED_TEXT, (match, content: string, id: string) => {
+      const ink = COLOUR_INK.get(id)
+      return ink ? `<span style="color: ${ink}">${content}</span>` : match
     })
     .replace(AI_ADDITION, `<span style="color: ${AI_INK}">$1</span>`)
 

@@ -297,10 +297,11 @@ export function plainNote(markdown: string): string {
       .replace(/^ {0,3}```.*$/gm, ' ')
       // <mark> et <span> recopies de la note de l'utilisateur.
       .replace(/<[^>]+>/g, ' ')
-      // Surlignages et ajouts : le texte reste, le code couleur part —
+      // Surlignages, couleurs et ajouts : le texte reste, le code couleur part —
       // « definition », « retenir » sont des mots de l'interface, que le cours
       // n'emploie pas.
       .replace(/==([\s\S]+?)=={[a-z-]+}/g, '$1')
+      .replace(/\[([^[\]\n]+)\]\{[a-z-]+\}/g, '$1')
       .replace(/\+\+([\s\S]+?)\+\+/g, '$1')
       // La ligne qui fait d'un tableau un tableau, et qui n'est que ponctuation.
       .replace(/^ {0,3}\|?(?:\s*:?-{3,}:?\s*\|)+.*$/gm, ' ')

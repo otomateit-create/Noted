@@ -524,10 +524,11 @@ export default function App(): React.JSX.Element {
   const clearMention = useCallback(() => setChatMention(null), [])
 
   /**
-   * Une proposition de l'assistant vient d'arriver dans le panneau des notes :
-   * s'il etait replie par le mode concentration ou decoche du bandeau,
+   * Une proposition de l'assistant attend une decision dans le panneau des
+   * notes : s'il etait replie par le mode concentration ou decoche du bandeau,
    * l'apercu resterait invisible et la conversation attendrait dans le vide.
-   * On rallume donc la feuille — ecrire dedans, c'est la montrer.
+   * On rallume donc la feuille. Une ecriture sans decision, elle, ne la
+   * rallume pas : elle s'applique feuille repliee (voir NotesPanel).
    */
   const revealNotes = useCallback(() => {
     setPanneaux((current) => (current.notes ? current : { ...current, notes: true }))

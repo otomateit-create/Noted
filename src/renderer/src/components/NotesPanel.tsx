@@ -1417,6 +1417,12 @@ export default function NotesPanel({
         // de l'utilisateur, dans le fil du chat, et une carte de confirmation a
         // l'arrivee lui redemanderait une decision sur un texte qu'il a deja lu.
         // La carte d'apres-coup, elle, reste — c'est par elle qu'on annule.
+        //
+        // Seul l'apercu qui attend une decision rallume la feuille : sans lui a
+        // l'ecran, l'assistant attendrait dix minutes dans le vide. Une
+        // ecriture sans decision s'applique la ou est la feuille, masquee
+        // comprise — l'utilisateur l'a repliee pour avoir de la place, et le
+        // fil du chat lui dit deja ce qui s'ecrit.
         if (autoApply || incoming.direct) {
           void applyIncoming(incoming, true)
         } else {
@@ -1425,8 +1431,8 @@ export default function NotesPanel({
             proposal: incoming,
             base: editor ? htmlToMarkdown(editor.getHTML()) : ''
           })
+          onProposalShown()
         }
-        onProposalShown()
       })()
     })
 
@@ -1459,8 +1465,11 @@ export default function NotesPanel({
         if (current?.stage === 'writing') return { ...current, draft }
         return { stage: 'writing', draft, base: editor ? htmlToMarkdown(editor.getHTML()) : '' }
       })
-      // Le panneau se montre a la premiere ligne, comme pour une proposition.
-      if (revealedDraft.current !== draft.id) {
+      // Le panneau se montre a la premiere ligne, comme pour une proposition —
+      // et donc seulement quand une decision suivra. Un ajout (`inserer`,
+      // l'ecriture du brouillon) s'applique sans apercu : il s'ecrit feuille
+      // repliee si elle l'est.
+      if (revealedDraft.current !== draft.id && draft.kind !== 'inserer' && !autoApply) {
         revealedDraft.current = draft.id
         onProposalShown()
       }
@@ -1480,7 +1489,7 @@ export default function NotesPanel({
       offDraft()
       offEnd()
     }
-  }, [editor, onProposalShown])
+  }, [editor, onProposalShown, autoApply])
 
   /**
    * Changer de cours ou fermer le panneau retire l'apercu : la proposition

@@ -105,12 +105,19 @@ export function useChat(courseId: string | null) {
         const next = [...thread]
         const message = { ...next[index] }
 
+        // Tout ce qui arrive ensuite dit que la requete est passee : le signe
+        // de la nouvelle tentative s'efface.
+        if (message.retry && event.kind !== 'retry') message.retry = undefined
+
         switch (event.kind) {
           case 'text':
             message.text += event.delta
             break
           case 'thinking':
             message.thinking = (message.thinking ?? '') + event.delta
+            break
+          case 'retry':
+            message.retry = { attempt: event.attempt, max: event.max }
             break
           case 'tool':
             message.toolCalls = [...(message.toolCalls ?? []), event.call]

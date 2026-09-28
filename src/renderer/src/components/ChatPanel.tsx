@@ -1608,7 +1608,15 @@ function Message({
         </div>
       )}
 
-      {message.streaming && !visible && <Thinking tokens={message.tokens} />}
+      {/* Jusqu'a la fin du tour, meme apres une premiere phrase : un « sections 1
+          a 4 ecrites » n'est pas la fin, et le travail continue dessous. */}
+      {message.streaming && (
+        <Thinking
+          label={visible ? 'En cours' : 'Réflexion'}
+          tokens={message.tokens}
+          retry={message.retry}
+        />
+      )}
 
       {message.error && <div className="message-error">{message.error}</div>}
     </div>
@@ -1752,9 +1760,22 @@ function MemoryTraceRow({
 /**
  * L'attente, rendue lisible : un scintillement qui parcourt le mot, le temps
  * ecoule, et le nombre de tokens deja produits. Une reponse documentee peut
- * demander une minute ; sans ce signe, on croit l'application bloquee.
+ * demander une minute ; sans ce signe, on croit l'application bloquee. Quand
+ * le moteur retente une requete echouee, il le dit aussi : rien ne s'ecrit
+ * pendant ce temps-la, et le compteur ne bouge pas.
+ *
+ * Il reste jusqu'a la fin du tour : un resume ecrit partie par partie donne
+ * des nouvelles en chemin, et le travail continue sous elles.
  */
-function Thinking({ tokens }: { tokens?: number }): React.JSX.Element {
+function Thinking({
+  label,
+  tokens,
+  retry
+}: {
+  label: string
+  tokens?: number
+  retry?: ChatMessage['retry']
+}): React.JSX.Element {
   const [seconds, setSeconds] = useState(0)
 
   useEffect(() => {
@@ -1766,7 +1787,11 @@ function Thinking({ tokens }: { tokens?: number }): React.JSX.Element {
     return () => window.clearInterval(timer)
   }, [])
 
-  const parts = [seconds > 0 ? `${seconds} s` : null, tokens ? `${tokens} tokens` : null]
+  const parts = [
+    seconds > 0 ? `${seconds} s` : null,
+    tokens ? `${tokens} tokens` : null,
+    retry ? `nouvelle tentative ${retry.attempt}/${retry.max}` : null
+  ]
     .filter(Boolean)
     .join(' · ')
 
@@ -1775,7 +1800,7 @@ function Thinking({ tokens }: { tokens?: number }): React.JSX.Element {
       <span className="thinking-glyph" aria-hidden="true">
         ✳
       </span>
-      <span className="thinking-label">Réflexion</span>
+      <span className="thinking-label">{label}</span>
       {parts && <span className="thinking-meta">{parts}</span>}
     </div>
   )

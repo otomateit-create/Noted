@@ -93,6 +93,19 @@ export const HIGHLIGHT_COLORS: readonly HighlightColor[] = [
   }
 ] as const
 
+/**
+ * Les couleurs de texte des notes, celles de l'outil « Couleur du texte ».
+ * Chacune reprend la teinte d'un code : c'est par ce code que l'assistant la
+ * pose, en ecrivant [texte]{code}.
+ */
+export const TEXT_COLORS: readonly { code: HighlightColorId; label: string; value: string }[] = [
+  { code: 'retenir', label: 'Laiton', value: '#c9973f' },
+  { code: 'incompris', label: 'Rouge', value: '#dc5b4c' },
+  { code: 'definition', label: 'Vert', value: '#4ca97a' },
+  { code: 'formule', label: 'Bleu', value: '#3d8fd1' },
+  { code: 'transversal', label: 'Violet', value: '#9b6bc4' }
+]
+
 // ---------------------------------------------------------------------------
 // Habillage des tableaux
 // ---------------------------------------------------------------------------
@@ -807,6 +820,11 @@ export interface ChatMessage {
   thinking?: string
   /** Tokens produits, mis a jour pendant la reponse. */
   tokens?: number
+  /**
+   * Nouvelle tentative en cours apres un echec de la requete. Retiree des que
+   * la reponse reprend.
+   */
+  retry?: { attempt: number; max: number }
   /** true tant que la reponse est en cours de reception. */
   streaming?: boolean
   /** Message d'erreur si le tour a echoue. */
@@ -885,6 +903,8 @@ export type ChatStreamEvent =
   | { kind: 'tool'; messageId: string; call: ToolCallTrace }
   | { kind: 'tool-result'; messageId: string; toolId: string; result: string }
   | { kind: 'tokens'; messageId: string; tokens: number }
+  /** Le moteur retente une requete echouee (serveur sature, connexion coupee). */
+  | { kind: 'retry'; messageId: string; attempt: number; max: number }
   | { kind: 'done'; messageId: string }
   | { kind: 'error'; messageId: string; message: string }
   /** Mode voix : l'utilisateur a coupe la parole ; `at` borne, dans le texte, ce qu'il a entendu. */
