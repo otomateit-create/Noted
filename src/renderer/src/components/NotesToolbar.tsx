@@ -1,5 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Editor } from '@tiptap/react'
+import {
+  AArrowDown,
+  AArrowUp,
+  AlignCenter,
+  AlignLeft,
+  CodeXml,
+  Highlighter,
+  List,
+  ListOrdered,
+  Quote,
+  Table,
+  Workflow
+} from 'lucide-react'
 import { HIGHLIGHT_COLORS, TEXT_COLORS } from '@shared/types'
 
 interface NotesToolbarProps {
@@ -8,6 +21,13 @@ interface NotesToolbarProps {
 
 /** Couleurs de texte proposees, en plus des cinq couleurs de surlignage. */
 const TEXT_COLOURS = [{ label: 'Par défaut', value: null }, ...TEXT_COLORS]
+
+/**
+ * Le trait des icones de la barre, un peu plus fin que celui de lucide par
+ * defaut : a cette taille, le trait de 2 pesait plus lourd que les lettres
+ * G, I, S, B dessinees a cote.
+ */
+const ICON = { size: 15, strokeWidth: 1.8, 'aria-hidden': true } as const
 
 export default function NotesToolbar({ editor }: NotesToolbarProps): React.JSX.Element | null {
   // L'editeur ne previent pas React quand la selection change : on force un
@@ -74,14 +94,14 @@ export default function NotesToolbar({ editor }: NotesToolbarProps): React.JSX.E
           onClick={() => editor.chain().focus().setTextAlign('left').run()}
           title="Aligner à gauche"
         >
-          ≡
+          <AlignLeft {...ICON} />
         </ToolButton>
         <ToolButton
           active={editor.isActive({ textAlign: 'center' })}
           onClick={() => editor.chain().focus().setTextAlign('center').run()}
           title="Centrer"
         >
-          ≣
+          <AlignCenter {...ICON} />
         </ToolButton>
       </ToolGroup>
 
@@ -91,28 +111,28 @@ export default function NotesToolbar({ editor }: NotesToolbarProps): React.JSX.E
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           title="Liste à puces"
         >
-          •
+          <List {...ICON} />
         </ToolButton>
         <ToolButton
           active={editor.isActive('orderedList')}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           title="Liste numérotée"
         >
-          1.
+          <ListOrdered {...ICON} />
         </ToolButton>
         <ToolButton
           active={editor.isActive('blockquote')}
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           title="Citation"
         >
-          ❝
+          <Quote {...ICON} />
         </ToolButton>
         <ToolButton
           active={editor.isActive('codeBlock')}
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
           title="Bloc de code"
         >
-          {'</>'}
+          <CodeXml {...ICON} />
         </ToolButton>
       </ToolGroup>
 
@@ -126,7 +146,7 @@ export default function NotesToolbar({ editor }: NotesToolbarProps): React.JSX.E
           }
           title="Tableau"
         >
-          <TableIcon />
+          <Table {...ICON} />
         </ToolButton>
         <CalloutMenu editor={editor} />
         <DiagramMenu editor={editor} />
@@ -144,31 +164,28 @@ function ToolGroup({ children }: { children: React.ReactNode }): React.JSX.Eleme
 }
 
 /**
- * Un tableau, dessine — la premiere ligne pleine, comme l'en-tete qu'insere le
- * bouton. Les caracteres de grille d'Unicode ne montraient pas de quoi il
- * s'agissait a cette taille.
+ * Un encadre, dessine tel qu'il parait dans la note : un cadre au liseré
+ * gauche appuye, un titre et une ligne de texte. Lucide n'a rien qui
+ * ressemble a cet objet-la, et le ▣ d'avant ne disait pas ce qu'il inserait.
+ * Meme grille et meme trait que les icones lucide voisines.
  */
-function TableIcon(): React.JSX.Element {
+function CalloutIcon(): React.JSX.Element {
   return (
-    <svg viewBox="0 0 16 14" width="15" height="13" aria-hidden="true" focusable="false">
-      <rect
-        x="0.75"
-        y="0.75"
-        width="14.5"
-        height="12.5"
-        rx="1.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.2"
-      />
-      <path d="M0.75 4.75h14.5" stroke="currentColor" strokeWidth="1.2" />
-      <path
-        d="M0.75 9h14.5M5.6 4.75V13.25M10.4 4.75V13.25"
-        stroke="currentColor"
-        strokeWidth="0.9"
-        opacity="0.55"
-      />
-      <path d="M1 1.6h14v3.1H1z" fill="currentColor" opacity="0.18" />
+    <svg
+      viewBox="0 0 24 24"
+      width={ICON.size}
+      height={ICON.size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={ICON.strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3.9 5v14" strokeWidth="3" />
+      <path d="M9 9.5h7" strokeWidth="2.4" />
+      <path d="M9 14.5h9" />
     </svg>
   )
 }
@@ -245,7 +262,7 @@ function FontSizeStepper({ editor }: { editor: Editor }): React.JSX.Element {
         disabled={index === 0}
         title="Réduire la taille du texte"
       >
-        −
+        <AArrowDown {...ICON} />
       </button>
       <span className="tool-stepper-value">{TEXT_SIZES[index].label}</span>
       <button
@@ -257,7 +274,7 @@ function FontSizeStepper({ editor }: { editor: Editor }): React.JSX.Element {
         disabled={index === TEXT_SIZES.length - 1}
         title="Augmenter la taille du texte"
       >
-        +
+        <AArrowUp {...ICON} />
       </button>
     </div>
   )
@@ -289,6 +306,9 @@ function useDismiss(onDismiss: () => void): React.RefObject<HTMLDivElement | nul
 function ColourMenu({ editor }: { editor: Editor }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const ref = useDismiss(() => setOpen(false))
+  // Le trait sous le A porte la couleur du texte sous le curseur, comme dans
+  // Word : on voit ce qu'on va poser, et ce qui est deja pose.
+  const current = (editor.getAttributes('textStyle').color as string | undefined) ?? null
 
   return (
     <div className="tool-menu" ref={ref}>
@@ -301,7 +321,10 @@ function ColourMenu({ editor }: { editor: Editor }): React.JSX.Element {
         }}
         title="Couleur du texte"
       >
-        <span className="tool-colour-dot" style={{ background: 'currentColor' }} />A
+        <span className="tool-glyph-colour" aria-hidden="true">
+          A
+          <span className="tool-colour-bar" style={{ background: current ?? 'var(--text)' }} />
+        </span>
       </button>
 
       {open && (
@@ -350,7 +373,7 @@ function HighlightMenu({ editor }: { editor: Editor }): React.JSX.Element {
         }}
         title="Surligner"
       >
-        ▮
+        <Highlighter {...ICON} />
       </button>
 
       {open && (
@@ -409,7 +432,7 @@ function CalloutMenu({ editor }: { editor: Editor }): React.JSX.Element {
         }}
         title="Encadré"
       >
-        ▣
+        <CalloutIcon />
       </button>
 
       {open && (
@@ -496,7 +519,7 @@ function DiagramMenu({ editor }: { editor: Editor }): React.JSX.Element {
         }}
         title="Schéma"
       >
-        ⌥
+        <Workflow {...ICON} />
       </button>
 
       {open && (

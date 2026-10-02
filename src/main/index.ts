@@ -4,6 +4,7 @@ import { geometrieRetenue, suivreGeometrie } from './fenetre'
 import { FEUX_REPOS, registerIpc } from './ipc'
 import { declareMediaScheme, serveMedia } from './media'
 import { buildMenu } from './menu'
+import { demarrerMiseAJourClaude } from './claude/mise-a-jour'
 import { disposeAllSessions } from './claude/session'
 import { sortirDeVoix } from './voix/session'
 import { scanForGeneration } from './flashcards/generation'
@@ -97,6 +98,9 @@ void app.whenReady().then(async () => {
   // generation echouer hors ligne : on rattrape en tache de fond, apres avoir
   // laisse l'application s'installer.
   void scanForGeneration()
+
+  // Garde le CLI Claude Code a jour, pour que les nouveaux modeles apparaissent.
+  demarrerMiseAJourClaude()
 
   app.on('activate', () => {
     // Sur macOS, cliquer l'icone du Dock rouvre une fenetre si tout est ferme.

@@ -117,3 +117,8 @@ export async function supportedModels(): Promise<ChatModel[]> {
   cached = (await discover()) ?? FALLBACK
   return cached
 }
+
+/** Force une nouvelle decouverte au prochain appel, apres une mise a jour du CLI. */
+export function resetSupportedModels(): void {
+  cached = null
+}

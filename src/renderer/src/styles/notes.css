@@ -66,10 +66,22 @@
   line-height: 1;
 }
 
-.tool-colour-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+/* Le A de la couleur du texte, souligne de la teinte en cours — celui de Word. */
+.tool-glyph-colour {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-family: var(--font-read);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tool-colour-bar {
+  width: 13px;
+  height: 3px;
+  border-radius: 1px;
 }
 
 /* --- Taille du texte, a la maniere de Word --------------------------------- */
@@ -429,6 +441,214 @@
   pointer-events: none;
   color: var(--text-ghost);
   font-style: italic;
+}
+
+/* --- Sommaire ---------------------------------------------------------------
+   Un bouton du bandeau, et la liste des parties qu'il deplie par-dessus la
+   feuille — le rectangle flottant de la legende du cours. Dedans, la voix de
+   la feuille : les parties en serif, les subdivisions un cran en retrait et
+   un ton plus bas, la partie ou l'on se trouve marquee d'un filet laiton. */
+
+/* Le groupe de gauche ne cede jamais : c'est le statut, a droite, qui
+   abandonne ses boutons quand le bandeau retrecit (regles plus bas). */
+.notes-head-start {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+/* « Aa » en toutes lettres, dans la serif de la feuille : le bouton de mise en
+   forme d'Apple Notes. L'icone lucide equivalente se lisait « AA » a cette
+   taille. */
+.notes-format-glyph {
+  font-family: var(--font-read);
+  font-size: 15px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.notes-head-start .panel-label {
+  margin-right: var(--space-1);
+}
+
+.notes-outline {
+  display: flex;
+  align-items: center;
+}
+
+/* Cale sur le bandeau et non sur le bouton : dans un panneau etroit, le
+   rectangle deborderait a droite, ou le panneau le rognerait. */
+.notes-outline-pop {
+  position: absolute;
+  top: 100%;
+  left: var(--space-2);
+  z-index: 30;
+  padding-top: 5px;
+}
+
+.notes-outline-panel {
+  display: flex;
+  flex-direction: column;
+  /* `cqw` mesure le bandeau, conteneur de requete : le rectangle garde huit
+     pixels de marge de chaque cote. */
+  width: min(380px, calc(100cqw + var(--space-4)));
+  /* Borne par la fenetre : le panneau rogne ce qui le depasse. */
+  max-height: min(560px, calc(100vh - var(--titlebar-height) - 120px));
+  background: var(--paper-overlay);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+  animation: popover-in 120ms var(--ease);
+  overflow: hidden;
+}
+
+.notes-outline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-2);
+  border-bottom: 1px solid var(--rule);
+}
+
+.notes-outline-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+}
+
+.notes-outline-fold {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  padding: 2px 6px;
+  margin-right: -6px;
+  border-radius: var(--radius-sm);
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.notes-outline-fold:hover {
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+.notes-outline-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.notes-outline-link {
+  display: block;
+  width: 100%;
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-read);
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--text-dim);
+  transition:
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.notes-outline-link:hover {
+  background: color-mix(in srgb, var(--brass) 8%, transparent);
+  color: var(--brass-strong);
+}
+
+.notes-outline-item[data-level='1'] .notes-outline-link {
+  padding-left: calc(var(--space-2) + 1.15em);
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.notes-outline-item[data-level='1'] .notes-outline-link:hover {
+  color: var(--brass-strong);
+}
+
+/* Une grande partie s'ecarte un peu de la precedente : les groupes se lisent
+   avant les lignes. */
+.notes-outline-item[data-level='0']:not(:first-child) {
+  margin-top: 2px;
+}
+
+/* Vous etes ici : un filet laiton et l'encre pleine, sans aplat — le survol
+   garde le sien. */
+.notes-outline-item[data-current='true'] .notes-outline-link {
+  box-shadow: inset 2px 0 0 var(--brass);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text);
+}
+
+/* --- Parties repliees --------------------------------------------------------
+   Le chevron attend au bout de chaque titre qui a quelque chose sous lui : il
+   parait au survol du titre, et reste affiche sur une partie repliee, suivi
+   de « … » — ce qui est cache se signale sans se raconter. */
+
+/* `!important`, et non une specificite de plus : chaque sorte de bloc pose
+   son propre `display` — la formule isolee de math.css, `block` a deux
+   classes, restait visible dans une partie repliee. Un bloc replie doit
+   disparaitre quelle que soit sa sorte, y compris celles qui viendront. */
+.note-folded {
+  display: none !important;
+}
+
+.note-fold-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 0.4em;
+  padding: 1px 2px;
+  vertical-align: 0.08em;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-ghost);
+  opacity: 0;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    opacity var(--fast) var(--ease),
+    background-color var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+
+.note-fold-toggle svg {
+  transition: transform var(--normal) var(--ease);
+}
+
+.notes-editor > :hover > .note-fold-toggle,
+.note-fold-toggle[data-folded='true'] {
+  opacity: 1;
+}
+
+.note-fold-toggle:hover {
+  background: var(--brass-wash);
+  color: var(--brass-strong);
+}
+
+.note-fold-toggle[data-folded='true'] {
+  padding-right: 6px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  color: var(--text-faint);
+}
+
+.note-fold-toggle[data-folded='true'] svg {
+  transform: rotate(-90deg);
+}
+
+.note-fold-toggle[data-folded='true']::after {
+  content: '…';
 }
 
 /* --- Tableaux ---------------------------------------------------------------
@@ -1535,28 +1755,31 @@
    chacun egal a la place que reclame l'etat juste au-dessus, mesuree sur le
    cas le plus charge — ici un compteur a cinq chiffres.
 
-     tout                       478 px
-     sans le compteur de mots   403 px
-     sans « Trier par page »    295 px
-     sans « Mettre au propre »  170 px
+     tout                       546 px
+     sans le compteur de mots   471 px
+     sans « Trier par page »    363 px
+     sans « Mettre au propre »  238 px
+
+   Les boutons Sommaire et « Aa » ont ajoute 68 px a gauche de l'etiquette,
+   reportes sur chaque seuil : ils restent, eux, quelle que soit la largeur.
 
    Le compteur part en premier parce qu'il n'est qu'une information, et que
    l'indicateur d'enregistrement — celui qu'on cherche vraiment — reste. Les
    deux actions suivent, la plus specialisee d'abord ; toutes deux restent
    accessibles a l'assistant, a qui on peut simplement le demander. */
-@container bandeau (max-width: 478px) {
+@container bandeau (max-width: 546px) {
   .panel-head .notes-count {
     display: none;
   }
 }
 
-@container bandeau (max-width: 403px) {
+@container bandeau (max-width: 471px) {
   .panel-head .notes-sort {
     display: none;
   }
 }
 
-@container bandeau (max-width: 295px) {
+@container bandeau (max-width: 363px) {
   .panel-head .notes-tidy {
     display: none;
   }

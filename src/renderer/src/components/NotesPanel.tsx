@@ -20,6 +20,7 @@ import { noteAnchors, sortAnchoredNote } from '@shared/note-order'
 import BlockTools from './BlockTools'
 import type { ChatMention } from './ChatPanel'
 import NotesGutter from './NotesGutter'
+import NotesOutline from './NotesOutline'
 import NotesToolbar from './NotesToolbar'
 import PanelLabel from './PanelLabel'
 import { ANCHORED, AnchorAttribute, effectiveAnchor } from '../lib/editor-anchor'
@@ -28,6 +29,8 @@ import { StyledTable } from '../lib/editor-table'
 import { Diagram, mountMindmap, renderDiagram, validateDiagram } from '../lib/editor-diagram'
 import { mathExtensions } from '../lib/editor-math'
 import { FontSize } from '../lib/editor-font-size'
+import { Fold } from '../lib/editor-fold'
+import { usePersisted } from '../hooks/usePersisted'
 import {
   aiMarkdownToHtml,
   checkTables,
@@ -290,6 +293,12 @@ export default function NotesPanel({
 }: NotesPanelProps): React.JSX.Element {
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [counts, setCounts] = useState({ words: 0, characters: 0 })
+  /**
+   * La barre de mise en forme, repliee par defaut : la feuille commence sous
+   * le bandeau, et ⌘B, ⌘I, les titres en Markdown marchent sans elle. « Aa »
+   * la fait paraitre, et le choix se retient.
+   */
+  const [formatting, setFormatting] = usePersisted('noted.miseEnForme', '')
   const [proposal, setProposal] = useState<ProposalState | null>(null)
   /** Miroir de l'etat, pour repondre au main depuis les nettoyages d'effets. */
   const proposalRef = useRef<ProposalState | null>(null)
@@ -427,6 +436,9 @@ export default function NotesPanel({
       // pas la suite de symboles. Indispensable pour un cours de finance, ou
       // une definition sur deux est une formule.
       ...mathExtensions,
+      // Replier une partie sous son titre, pour se la reciter : un regard sur
+      // la note, qui n'en change pas une lettre.
+      Fold,
       // Le lien vivant avec le cours : chaque bloc retient en face de quoi il
       // a ete ecrit, et le retient une seule fois, au premier caractere.
       AnchorAttribute.configure({
@@ -469,6 +481,12 @@ export default function NotesPanel({
       // Un paragraphe par ligne rend au contraire chaque commande de bloc
       // exacte : elle ne saisit que la ligne ou l'on est.
       handleClick: (view, _pos, event) => {
+        // Derniere partie repliee : la fin du texte n'a plus de place a
+        // l'ecran, et des lignes ajoutees dessous tomberaient dans ce qu'elle
+        // cache.
+        const last = view.dom.lastElementChild
+        if (last && last.getClientRects().length === 0) return false
+
         const { state } = view
         const endPos = state.doc.content.size
         const endCoords = view.coordsAtPos(endPos)
@@ -798,7 +816,9 @@ export default function NotesPanel({
           index += 1
           const anchor = node.attrs.ancre as NoteAnchor | null
           if (anchor) seen.inherited = anchor
-          if (!element) return
+          // Un bloc replie n'a pas de place a l'ecran : sa boite vide le
+          // dirait tout en haut, au-dessus de la ligne.
+          if (!element || element.getClientRects().length === 0) return
           if (element.getBoundingClientRect().top <= top) seen.found = seen.inherited
         })
 
@@ -847,7 +867,9 @@ export default function NotesPanel({
       index += 1
       const anchor = node.attrs.ancre as NoteAnchor | null
       if (anchor) seen.inherited = anchor
-      if (!element) return
+      // Un bloc replie ne peut pas etre rejoint : c'est son titre, dernier
+      // bloc visible avant lui, qui le represente.
+      if (!element || element.getClientRects().length === 0) return
 
       if (!seen.target && samePlace(seen.inherited, follow.anchor)) seen.target = element
       // A defaut, le dernier bloc ecrit avant cet endroit du cours : on voit
@@ -868,6 +890,45 @@ export default function NotesPanel({
     // Le compteur seul declenche : suivre deux fois le meme endroit est legitime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [follow?.nonce])
+
+  /**
+   * Un clic dans le sommaire : la feuille rejoint le titre, et le cours suit
+   * si la synchronisation joue — c'est un geste de navigation, au meme titre
+   * que la molette.
+   *
+   * Le titre s'arrete un peu sous le bord, pas contre lui : colle au bandeau,
+   * on ne le verrait pas arriver. Un halo laiton le designe un instant, comme
+   * dans le cours : dans une note de trente titres, l'oeil doit savoir ou se
+   * poser. Il passe par une animation et non par une classe — ProseMirror
+   * tient le DOM de la feuille et defait ce qu'on y pose.
+   */
+  const jumpTo = useCallback(
+    (index: number) => {
+      if (!editor) return
+      // Une sous-partie dans une partie repliee n'a pas de place ou arriver.
+      editor.commands.unfoldAround(index)
+      const body = bodyRef.current
+      const element = editor.view.dom.children[index] as HTMLElement | undefined
+      if (!body || !element) return
+
+      markDriven()
+      const offset = element.getBoundingClientRect().top - body.getBoundingClientRect().top
+      body.scrollTo({ top: body.scrollTop + offset - 24, behavior: 'smooth' })
+
+      const wash = getComputedStyle(element).getPropertyValue('--brass-wash').trim()
+      element.animate(
+        [
+          { backgroundColor: wash, boxShadow: `0 0 0 6px ${wash}` },
+          { backgroundColor: 'transparent', boxShadow: '0 0 0 6px transparent' }
+        ],
+        { duration: 1600, easing: 'ease-out' }
+      )
+
+      const anchor = effectiveAnchor(editor.state.doc, index)
+      if (anchor) onFollowRef.current(anchor)
+    },
+    [editor, markDriven]
+  )
 
   // -------------------------------------------------------------------------
   // L'ancrage fin : le passage du cours dont un groupe de blocs parle
@@ -1721,7 +1782,29 @@ export default function NotesPanel({
   return (
     <section className="panel panel--notes" hidden={hidden}>
       <header className="panel-head">
-        <PanelLabel label="Notes" shortcut="⌘2" expanded={expanded} onToggle={onToggleExpand} />
+        <div className="notes-head-start">
+          <PanelLabel label="Notes" shortcut="⌘2" expanded={expanded} onToggle={onToggleExpand} />
+          {course && <NotesOutline editor={editor} onJump={jumpTo} />}
+          {course && (
+            <button
+              type="button"
+              className="icon-button notes-format-toggle"
+              data-active={formatting === '1'}
+              aria-pressed={formatting === '1'}
+              aria-label="Mise en forme"
+              title={
+                formatting === '1'
+                  ? 'Masquer la barre de mise en forme'
+                  : 'Afficher la barre de mise en forme'
+              }
+              onClick={() => setFormatting(formatting === '1' ? '' : '1')}
+            >
+              <span className="notes-format-glyph" aria-hidden="true">
+                Aa
+              </span>
+            </button>
+          )}
+        </div>
         {course && (
           <div className="notes-status">
             <button
@@ -1769,7 +1852,7 @@ export default function NotesPanel({
         )}
       </header>
 
-      <NotesToolbar editor={editor} />
+      {course && formatting === '1' && <NotesToolbar editor={editor} />}
 
       {course && proposal && (
         <ProposalCard

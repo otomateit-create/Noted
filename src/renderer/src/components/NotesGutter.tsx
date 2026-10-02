@@ -92,7 +92,9 @@ export default function NotesGutter({ editor, onGoTo }: NotesGutterProps): React
     editor.state.doc.forEach((node, offset) => {
       const element = children[index] as HTMLElement | undefined
       index += 1
-      if (!element) return
+      // Un bloc d'une partie repliee n'a pas de place a l'ecran : sa boite
+      // vide poserait son repere en haut de la feuille.
+      if (!element || element.getClientRects().length === 0) return
 
       const box = element.getBoundingClientRect()
       const pos = offset + 1

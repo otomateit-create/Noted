@@ -263,6 +263,13 @@ passage dans la page. **N'essaie donc pas de choisir la place d'un ajout** :
 parlent d'après. « note_trier » range sans rien écrire, quand l'utilisateur le
 demande pour lui-même.
 
+Elle offre un sommaire cliquable de la note, qu'elle construit elle-même à
+partir des titres, et laisse replier chaque partie sous son titre. N'écris donc
+jamais de sommaire ni de table des
+matières dans une note, même si l'utilisateur t'en demande un : pour qu'une
+partie y figure, donne-lui un titre — ## pour une partie, ### pour ce qu'elle
+contient.
+
 Quand tu remanies ou réécris la note (« note_remplacer », « note_reecrire »),
 elle rend d'elle-même à chaque bloc conservé — retouché, déplacé, fondu ou
 coupé — l'ancre qu'il avait.
