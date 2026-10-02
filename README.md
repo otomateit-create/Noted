@@ -212,5 +212,3 @@ npm run build        # compile les trois cibles
 **Étapes 1 à 5 livrées** : lecture des PDF, Word et Markdown, prise de notes,
 recherche hybride dans le cours par l'IA avec repli web, citations cliquables,
 matières libres, formules composées, interface claire.
-
-L'avancement détaillé, étape par étape, vit dans [docs/progression.md](docs/progression.md).
