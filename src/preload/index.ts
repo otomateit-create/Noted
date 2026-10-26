@@ -104,6 +104,8 @@ const api: NotedApi = {
       ipcRenderer.invoke(CHANNELS.courseReadMarkdown, courseId),
     readDocx: (courseId: string): Promise<DocxDocument> =>
       ipcRenderer.invoke(CHANNELS.courseReadDocx, courseId),
+    stageFrame: (page: string): Promise<string> =>
+      ipcRenderer.invoke(CHANNELS.courseStageFrame, page),
     readExtraction: (courseId: string): Promise<ExtractedCourse | null> =>
       ipcRenderer.invoke(CHANNELS.courseReadExtraction, courseId),
     cacheExtraction: (extracted: ExtractedCourse): Promise<void> =>

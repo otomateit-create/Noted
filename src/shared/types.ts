@@ -1144,6 +1144,11 @@ export interface NotedApi {
     /** Conversion d'un .docx en HTML, faite dans le main process. */
     readDocx(courseId: string): Promise<DocxDocument>
     /**
+     * Depose la page d'un cours HTML pour les cadres isoles de ses parties
+     * vivantes, et rend l'adresse ou ils la trouveront.
+     */
+    stageFrame(page: string): Promise<string>
+    /**
      * Le texte deja extrait de ce document lors d'une ouverture precedente, ou
      * null s'il faut le relire. Ne rend jamais rien pour les formats dont la
      * conversion sert de toute facon a l'affichage.

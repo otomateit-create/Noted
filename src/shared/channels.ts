@@ -20,6 +20,8 @@ export const CHANNELS = {
   courseReadBytes: 'course:read-bytes',
   courseReadMarkdown: 'course:read-markdown',
   courseReadDocx: 'course:read-docx',
+  /** La page d'un cours HTML, deposee pour les cadres de ses parties vivantes. */
+  courseStageFrame: 'course:stage-frame',
   /** Le texte deja extrait de ce document, s'il n'a pas bouge depuis. */
   courseReadExtraction: 'course:read-extraction',
   courseCacheExtraction: 'course:cache-extraction',

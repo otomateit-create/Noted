@@ -794,6 +794,18 @@ button.pager-position:hover .pager-current {
   -webkit-user-drag: none;
 }
 
+/* Le cadre d'une partie vivante (html-course.ts) : il prend la largeur de sa
+   place, et sa hauteur est celle que sa page annonce — nulle tant qu'elle n'a
+   rien dit, pour ne pas montrer la page entiere avant qu'elle ne se replie.
+   Dans une enveloppe en grille, il couvre toutes les colonnes. */
+.document-html iframe[data-noted-frame] {
+  display: block;
+  width: 100%;
+  height: 0;
+  border: 0;
+  grid-column: 1 / -1;
+}
+
 /* Signale qu'un element de Word n'a pas de traduction exacte a l'ecran, sans
    inquieter : le detail complet est dans l'infobulle. */
 .document-warning {

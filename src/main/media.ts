@@ -23,6 +23,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { net, protocol } from 'electron'
+import { FRAME_SCHEME } from './course-frames'
 import { vaultPaths } from './vault'
 
 /**
@@ -122,6 +123,13 @@ export function declareMediaScheme(): void {
         supportFetchAPI: true,
         bypassCSP: false
       }
+    },
+    // Electron n'accepte qu'un seul appel : le schema des cadres de cours
+    // (course-frames.ts) est donc declare ici. Standard pour que l'hote porte
+    // le jeton, sur comme une page ordinaire.
+    {
+      scheme: FRAME_SCHEME,
+      privileges: { standard: true, secure: true, bypassCSP: false }
     }
   ])
 }

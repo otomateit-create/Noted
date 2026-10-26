@@ -3,6 +3,7 @@ import path from 'node:path'
 import { geometrieRetenue, suivreGeometrie } from './fenetre'
 import { FEUX_REPOS, registerIpc } from './ipc'
 import { declareMediaScheme, serveMedia } from './media'
+import { serveFrames } from './course-frames'
 import { buildMenu } from './menu'
 import { demarrerMiseAJourClaude } from './claude/mise-a-jour'
 import { disposeAllSessions } from './claude/session'
@@ -89,6 +90,7 @@ void app.whenReady().then(async () => {
   await ensureVault()
   await seedPrompts()
   serveMedia()
+  serveFrames()
   registerIpc(() => mainWindow)
   buildMenu()
 

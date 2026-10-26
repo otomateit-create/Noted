@@ -22,6 +22,7 @@ import type {
   VoixEntree
 } from '../shared/types'
 import { readAnnotations, writeAnnotations } from './annotations'
+import { stageFrame } from './course-frames'
 import { generationStatus, scheduleGeneration } from './flashcards/generation'
 import {
   answer as answerCard,
@@ -218,6 +219,10 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
 
   ipcMain.handle(CHANNELS.courseReadDocx, (_event, courseId: unknown) =>
     readDocx(expectString(courseId, 'Identifiant de cours'))
+  )
+
+  ipcMain.handle(CHANNELS.courseStageFrame, (_event, page: unknown) =>
+    stageFrame(expectString(page, 'Page de cours'))
   )
 
   ipcMain.handle(CHANNELS.coursePreviewRead, (_event, courseId: unknown) =>

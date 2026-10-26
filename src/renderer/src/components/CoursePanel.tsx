@@ -29,7 +29,12 @@ import {
   prepareDocumentHtml,
   renderMarkdownCourse
 } from '../lib/document'
-import { HTML_COURSE_SCOPE, htmlCourseToContextText, prepareHtmlCourse } from '../lib/html-course'
+import {
+  connectFrames,
+  HTML_COURSE_SCOPE,
+  htmlCourseToContextText,
+  prepareHtmlCourse
+} from '../lib/html-course'
 import { withoutFrontMatter } from '../lib/markdown'
 import { passageBoxes, type Box } from '../lib/anchors'
 import { headingAbove } from '../lib/find'
@@ -301,12 +306,16 @@ export default function CoursePanel({
   const [warnings, setWarnings] = useState<string[]>([])
   /**
    * Ce qu'un cours HTML apporte en plus de son corps : sa feuille de style,
-   * confinee au conteneur, et les classes qu'il posait sur sa page. Null pour
-   * les autres formats — c'est aussi ce qui choisit le conteneur au rendu.
+   * confinee au conteneur, les classes qu'il posait sur sa page, et l'adresse
+   * ou les cadres de ses parties vivantes trouvent leur page (null s'il n'en a
+   * pas). Null pour les autres formats — c'est aussi ce qui choisit le
+   * conteneur au rendu.
    */
-  const [documentSkin, setDocumentSkin] = useState<{ css: string; bodyClass: string } | null>(
-    null
-  )
+  const [documentSkin, setDocumentSkin] = useState<{
+    css: string
+    bodyClass: string
+    frames: string | null
+  } | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [scrollbar, setScrollbar] = useState<ScrollbarGeometry | null>(null)
   const [extraction, setExtraction] = useState<{ done: number; total: number } | null>(null)
@@ -513,10 +522,15 @@ export default function CoursePanel({
           // dans le meme DOM que l'application, pour que surlignages, ancres et
           // ligne de lecture marchent exactement comme sur un Word.
           const prepared = prepareHtmlCourse(raw)
+          // Ce qui ne vit que par le script s'affiche dans des cadres isoles :
+          // leur page est deposee au main, qui la leur sert.
+          const frames = prepared.live
+            ? await window.noted.course.stageFrame(prepared.live.page)
+            : null
 
           if (!cancelled) {
-            setDocumentSkin({ css: prepared.css, bodyClass: prepared.bodyClass })
-            setDocumentHtml(prepared.html)
+            setDocumentSkin({ css: prepared.css, bodyClass: prepared.bodyClass, frames })
+            setDocumentHtml(prepared.live?.html ?? prepared.html)
             setLoadedId(courseId)
             setWarnings(prepared.warnings)
           }
@@ -686,15 +700,10 @@ export default function CoursePanel({
    * document. Laisse au navigateur, il changerait l'adresse de la page de
    * l'application ; on amene l'endroit sur la ligne de lecture, comme un renvoi.
    */
-  const followInternalLink = useCallback(
-    (event: React.MouseEvent) => {
-      const link = (event.target as HTMLElement).closest?.('a[href^="#"]')
+  const goToAnchor = useCallback(
+    (id: string) => {
       const body = bodyRef.current
-      if (!link || !body || !htmlRoot) return
-      event.preventDefault()
-
-      const id = decodeURIComponent(link.getAttribute('href')?.slice(1) ?? '')
-      if (!id) return
+      if (!id || !body || !htmlRoot) return
       const target =
         htmlRoot.querySelector<HTMLElement>(`#${CSS.escape(id)}`) ??
         htmlRoot.querySelector<HTMLElement>(`a[name="${CSS.escape(id)}"]`)
@@ -704,6 +713,24 @@ export default function CoursePanel({
     },
     [htmlRoot]
   )
+
+  const followInternalLink = useCallback(
+    (event: React.MouseEvent) => {
+      const link = (event.target as HTMLElement).closest?.('a[href^="#"]')
+      if (!link) return
+      event.preventDefault()
+      goToAnchor(decodeURIComponent(link.getAttribute('href')?.slice(1) ?? ''))
+    },
+    [goToAnchor]
+  )
+
+  // Les parties vivantes d'un cours HTML : leurs cadres recoivent leur page, et
+  // leurs liens internes menent ici, au cours, comme ceux du texte.
+  useEffect(() => {
+    const frames = documentSkin?.frames
+    if (!htmlRoot || !frames) return
+    return connectFrames(htmlRoot, frames, goToAnchor)
+  }, [htmlRoot, documentSkin, goToAnchor])
 
   const goToPage = useCallback((page: number) => {
     const body = bodyRef.current
